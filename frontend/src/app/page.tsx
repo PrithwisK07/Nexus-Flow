@@ -3,6 +3,8 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import ReactFlow, {
   Controls,
+  MiniMap,
+  Background,
   addEdge,
   useNodesState,
   useEdgesState,
@@ -15,16 +17,18 @@ import ReactFlow, {
 } from "reactflow";
 import "reactflow/dist/style.css";
 
-import { Settings, Play, Save, Layers, Plus, Search } from "lucide-react";
+import { Save, Play, Layers, Plus, Search } from "lucide-react";
 import NexusNode from "@/components/flow/NexusNode";
+import PropertiesPanel from "@/components/PropertiesPanel";
+import ContextMenu from "@/components/flow/ContextMenu";
+import LiveLogs from "@/components/LiveLogs";
+import { useUndoRedo } from "@/hooks/useUndoRedo";
 import { NODE_TYPES, CATEGORY_COLORS } from "@/lib/nodeConfig";
-import PropertiesPanel from "../components/PropertiesPanel";
-import ContextMenu from "../components/flow/ContextMenu";
 
 // Register custom node types
 const nodeTypes = { nexusNode: NexusNode };
 
-const INITIAL_NODES = [
+const INITIAL_NODES: Node[] = [
   {
     id: "1",
     type: "nexusNode",
@@ -47,17 +51,22 @@ export default function NexusFlowPage() {
 
 function NexusCanvas() {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // React Flow State
   const [nodes, setNodes, onNodesChange] = useNodesState(INITIAL_NODES);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [menu, setMenu] = useState<any>(null);
-  const ref = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
 
-  // Search State
+  // UI State
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [menu, setMenu] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // --- Global Canvas Settings State ---
+  // Undo/Redo Hook
+  const { takeSnapshot, undo, redo } = useUndoRedo(nodes, edges);
+
+  // Global Canvas Settings
   const [defaultEdgeType, setDefaultEdgeType] = useState<
     "smoothstep" | "default" | "straight"
   >("smoothstep");
@@ -65,19 +74,56 @@ function NexusCanvas() {
     "solid" | "dashed" | "dotted"
   >("solid");
 
+  // --- KEYBOARD SHORTCUTS (Undo/Redo) ---
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Undo: Ctrl+Z
+      if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        const state = undo(nodes, edges);
+        if (state) {
+          setNodes(state.nodes);
+          setEdges(state.edges);
+        }
+      }
+      // Redo: Ctrl+Y or Ctrl+Shift+Z
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        (e.key === "y" || (e.key === "z" && e.shiftKey))
+      ) {
+        e.preventDefault();
+        const state = redo(nodes, edges);
+        if (state) {
+          setNodes(state.nodes);
+          setEdges(state.edges);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [undo, redo, nodes, edges, setNodes, setEdges]);
+
+  // --- HANDLERS ---
+
   const onPaneClick = useCallback(() => {
     setMenu(null);
-  }, [setMenu]);
+    setSelectedNodeId(null);
+  }, []);
 
-  // --- Handlers ---
+  const onNodeClick = (_: React.MouseEvent, node: Node) => {
+    setSelectedNodeId(node.id);
+  };
+
   const onConnect = useCallback(
     (params: Connection | Edge) => {
+      takeSnapshot(nodes, edges); // Snapshot before connecting
       setEdges((eds) =>
         addEdge(
           {
             ...params,
             animated: true,
-            type: defaultEdgeType, // Use current global default
+            type: defaultEdgeType,
             style: {
               stroke: "#6366f1",
               strokeWidth: 2,
@@ -88,90 +134,18 @@ function NexusCanvas() {
                     ? "2,2"
                     : "0",
             },
-            markerEnd: {
-              type: MarkerType.ArrowClosed,
-              color: "#6366f1",
-            },
+            markerEnd: { type: MarkerType.ArrowClosed, color: "#6366f1" },
           },
           eds,
         ),
       );
     },
-    [setEdges, defaultEdgeType, defaultEdgePattern],
+    [setEdges, defaultEdgeType, defaultEdgePattern, takeSnapshot, nodes, edges],
   );
-
-  const onNodeContextMenu = useCallback(
-    (event: React.MouseEvent, node: Node) => {
-      event.preventDefault();
-      const pane = reactFlowWrapper.current?.getBoundingClientRect();
-
-      if (pane) {
-        setMenu({
-          id: node.id,
-          type: "node",
-          top: event.clientY - pane.top,
-          left: event.clientX - pane.left,
-        });
-      }
-    },
-    [setMenu],
-  );
-
-  const onEdgeContextMenu = useCallback(
-    (event: React.MouseEvent, edge: Edge) => {
-      event.preventDefault();
-      const pane = reactFlowWrapper.current?.getBoundingClientRect();
-
-      if (pane) {
-        setMenu({
-          id: edge.id,
-          type: "edge",
-          data: { type: edge.type, style: edge.style },
-          top: event.clientY - pane.top,
-          left: event.clientX - pane.left,
-        });
-      }
-    },
-    [setMenu],
-  );
-
-  const onPaneContextMenu = useCallback(
-    (event: React.MouseEvent) => {
-      event.preventDefault();
-      const pane = reactFlowWrapper.current?.getBoundingClientRect();
-
-      if (pane) {
-        setMenu({
-          id: "pane-menu",
-          type: "pane",
-          top: event.clientY - pane.top,
-          left: event.clientX - pane.left,
-        });
-      }
-    },
-    [setMenu],
-  );
-
-  const duplicateNode = (id: string) => {
-    const node = nodes.find((n) => n.id === id);
-    if (!node) return;
-    const position = { x: node.position.x + 20, y: node.position.y + 20 };
-    const newNode = {
-      ...node,
-      id: `${node.type}_${Date.now()}`,
-      position,
-      data: { ...node.data, label: `${node.data.label} (Copy)` },
-      selected: true,
-    };
-    setNodes((nds) => nds.concat(newNode));
-  };
 
   const onDragStart = (event: React.DragEvent, type: string) => {
     event.dataTransfer.setData("application/reactflow", type);
     event.dataTransfer.effectAllowed = "move";
-    const target = event.currentTarget as HTMLElement;
-    const rect = target.getBoundingClientRect();
-    event.dataTransfer.setDragImage(target, rect.width / 2, rect.height / 2);
   };
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -185,20 +159,17 @@ function NexusCanvas() {
       const type = event.dataTransfer.getData("application/reactflow");
       if (!type) return;
 
+      takeSnapshot(nodes, edges); // Snapshot before drop
+
       const position = screenToFlowPosition({
         x: event.clientX,
         y: event.clientY,
       });
 
-      const centeredPosition = {
-        x: position.x - 120,
-        y: position.y - 40,
-      };
-
       const newNode: Node = {
         id: `node_${Date.now()}`,
         type: "nexusNode",
-        position: centeredPosition,
+        position: { x: position.x - 120, y: position.y - 40 },
         data: {
           type,
           label: `NODE-${nodes.length + 1}`,
@@ -208,10 +179,11 @@ function NexusCanvas() {
 
       setNodes((nds) => nds.concat(newNode));
     },
-    [nodes, setNodes, screenToFlowPosition],
+    [nodes, setNodes, screenToFlowPosition, takeSnapshot, edges],
   );
 
   const onAddNode = (type: string) => {
+    takeSnapshot(nodes, edges);
     const wrapper = reactFlowWrapper.current?.getBoundingClientRect();
     if (wrapper) {
       const centerX = wrapper.left + wrapper.width / 2;
@@ -235,7 +207,87 @@ function NexusCanvas() {
     }
   };
 
+  // --- CONTEXT MENU HANDLERS ---
+
+  const onNodeContextMenu = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      event.preventDefault();
+      const pane = reactFlowWrapper.current?.getBoundingClientRect();
+      if (pane) {
+        setMenu({
+          id: node.id,
+          type: "node",
+          top: event.clientY - pane.top,
+          left: event.clientX - pane.left,
+        });
+      }
+    },
+    [],
+  );
+
+  const onEdgeContextMenu = useCallback(
+    (event: React.MouseEvent, edge: Edge) => {
+      event.preventDefault();
+      const pane = reactFlowWrapper.current?.getBoundingClientRect();
+      if (pane) {
+        setMenu({
+          id: edge.id,
+          type: "edge",
+          data: { type: edge.type, style: edge.style },
+          top: event.clientY - pane.top,
+          left: event.clientX - pane.left,
+        });
+      }
+    },
+    [],
+  );
+
+  const onPaneContextMenu = useCallback((event: React.MouseEvent) => {
+    event.preventDefault();
+    const pane = reactFlowWrapper.current?.getBoundingClientRect();
+    if (pane) {
+      setMenu({
+        id: "pane-menu",
+        type: "pane",
+        top: event.clientY - pane.top,
+        left: event.clientX - pane.left,
+      });
+    }
+  }, []);
+
+  // --- ACTION HELPERS ---
+
+  const duplicateNode = (id: string) => {
+    takeSnapshot(nodes, edges);
+    const node = nodes.find((n) => n.id === id);
+    if (!node) return;
+    const position = { x: node.position.x + 40, y: node.position.y + 40 };
+    const newNode = {
+      ...node,
+      id: `${node.data.type}_${Date.now()}`,
+      position,
+      data: { ...node.data, label: `${node.data.label} (Copy)` },
+      selected: true,
+    };
+    setNodes((nds) => nds.concat(newNode));
+  };
+
+  const updateNodeData = (id: string, newData: any) => {
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.id === id) {
+          return {
+            ...node,
+            data: { ...node.data, config: { ...node.data.config, ...newData } },
+          };
+        }
+        return node;
+      }),
+    );
+  };
+
   const updateEdgeStyle = (edgeId: string, type: any, pattern: any) => {
+    takeSnapshot(nodes, edges);
     setEdges((eds) =>
       eds.map((e) => {
         if (e.id === edgeId) {
@@ -256,7 +308,6 @@ function NexusCanvas() {
         return e;
       }),
     );
-    // Auto-save preference
     if (type) setDefaultEdgeType(type);
     if (pattern) setDefaultEdgePattern(pattern);
   };
@@ -266,32 +317,14 @@ function NexusCanvas() {
     if (pattern) setDefaultEdgePattern(pattern);
   };
 
-  const onNodeClick = (_: React.MouseEvent, node: Node) => {
-    setSelectedNodeId(node.id);
-  };
-
-  const updateNodeData = (id: string, newData: any) => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === id) {
-          return {
-            ...node,
-            data: { ...node.data, config: { ...node.data.config, ...newData } },
-          };
-        }
-        return node;
-      }),
-    );
-  };
-
-  const selectedNode = nodes.find((n) => n.id === selectedNodeId);
+  // --- RENDER ---
 
   return (
     <div className="flex h-screen w-full bg-slate-50 font-sans overflow-hidden">
       {/* LEFT SIDEBAR */}
       <div className="w-72 bg-white border-r border-gray-200 flex flex-col z-20 shadow-sm">
         <div className="p-5 border-b border-gray-100 flex items-center gap-3">
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-indigo-200 shadow-lg">
+          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-indigo-200 shadow-lg shrink-0">
             <Layers size={20} />
           </div>
           <div>
@@ -304,6 +337,7 @@ function NexusCanvas() {
           </div>
         </div>
 
+        {/* Search Bar */}
         <div className="p-4 pb-0">
           <div className="relative">
             <Search
@@ -320,20 +354,22 @@ function NexusCanvas() {
           </div>
         </div>
 
+        {/* Node Palette */}
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
           {["trigger", "web3", "data", "logic", "notify"].map((cat) => {
-            // 1. Filter Nodes based on Search Term
             const categoryNodes = Object.entries(NODE_TYPES).filter(
               ([type, config]) =>
                 config.category === cat &&
                 config.label.toLowerCase().includes(searchTerm.toLowerCase()),
             );
 
-            // 2. If no nodes match in this category, hide the category
             if (categoryNodes.length === 0) return null;
 
             return (
-              <div key={cat}>
+              <div
+                key={cat}
+                className="animate-in fade-in slide-in-from-left-4 duration-300"
+              >
                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-2">
                   {cat.charAt(0).toUpperCase() + cat.slice(1)}
                 </h3>
@@ -372,8 +408,8 @@ function NexusCanvas() {
 
       {/* MAIN CANVAS */}
       <div className="flex-1 flex flex-col relative h-full">
-        {/* Top Header */}
-        <div className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 z-10">
+        {/* Header */}
+        <div className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 z-10 shrink-0">
           <div className="flex items-center gap-4">
             <span className="text-slate-400 text-sm">
               Workflow /{" "}
@@ -388,22 +424,20 @@ function NexusCanvas() {
             </button>
             <button
               className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all transform hover:scale-105"
-              onClick={() => console.log(JSON.stringify(nodes, null, 2))}
+              onClick={() =>
+                console.log(
+                  "Deployment Config:",
+                  JSON.stringify(nodes, null, 2),
+                )
+              }
             >
               <Play size={16} /> Deploy
             </button>
           </div>
         </div>
 
-        {/* React Flow Wrapper */}
-        <div
-          className="flex-1 relative bg-slate-50"
-          ref={reactFlowWrapper}
-          style={{
-            backgroundImage: "radial-gradient(#cbd5e1 1px, transparent 1px)",
-            backgroundSize: "20px 20px",
-          }}
-        >
+        {/* Canvas Area */}
+        <div className="flex-1 relative bg-slate-50" ref={reactFlowWrapper}>
           <ReactFlow
             ref={ref}
             nodes={nodes}
@@ -414,16 +448,38 @@ function NexusCanvas() {
             onNodeClick={onNodeClick}
             onDragOver={onDragOver}
             onDrop={onDrop}
-            nodeTypes={nodeTypes}
             onPaneClick={onPaneClick}
             onNodeContextMenu={onNodeContextMenu}
             onEdgeContextMenu={onEdgeContextMenu}
             onPaneContextMenu={onPaneContextMenu}
+            nodeTypes={nodeTypes}
             fitView
             snapToGrid={true}
             snapGrid={[20, 20]}
           >
+            <Background gap={20} color="#cbd5e1" />
             <Controls className="!bg-white !border-gray-200 !shadow-lg !rounded-lg" />
+
+            <MiniMap
+              className="!bg-white !border-gray-200 !shadow-lg !rounded-lg"
+              zoomable
+              pannable
+              nodeColor={(n) => {
+                const type = n.data?.type || "";
+                if (type === "webhook" || type.includes("trigger"))
+                  return "#f59e0b";
+                if (
+                  type.includes("transfer") ||
+                  type.includes("swap") ||
+                  type.includes("contract")
+                )
+                  return "#6366f1";
+                if (type.includes("notify")) return "#f43f5e";
+                return "#e2e8f0";
+              }}
+            />
+
+            {/* Context Menu */}
             {menu && (
               <ContextMenu
                 onClick={onPaneClick}
@@ -439,13 +495,16 @@ function NexusCanvas() {
               />
             )}
           </ReactFlow>
+
+          {/* Live Logs Terminal */}
+          <LiveLogs />
         </div>
       </div>
 
       {/* RIGHT PROPERTIES PANEL */}
-      {selectedNode && (
+      {selectedNodeId && nodes.find((n) => n.id === selectedNodeId) && (
         <PropertiesPanel
-          selectedNode={selectedNode}
+          selectedNode={nodes.find((n) => n.id === selectedNodeId)}
           updateData={updateNodeData}
           onClose={() => setSelectedNodeId(null)}
         />
