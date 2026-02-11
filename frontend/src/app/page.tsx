@@ -562,6 +562,7 @@ function NexusCanvas() {
           updateData={updateNodeData}
           onClose={() => setSelectedNodeId(null)}
           globalSettings={globalSettings}
+          nodes={nodes} // <--- NEW: Pass the full nodes array
         />
       )}
 

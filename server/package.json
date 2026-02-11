@@ -14,6 +14,7 @@
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
+    "@types/ioredis": "^5.0.0",
     "@types/node": "^25.0.10",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
@@ -22,10 +23,12 @@
   "dependencies": {
     "@types/nodemailer": "^7.0.5",
     "body-parser": "^2.2.2",
+    "bullmq": "^5.67.3",
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "googleapis": "^170.1.0",
+    "ioredis": "^5.9.2",
     "nodemailer": "^7.0.12",
     "permissionless": "^0.3.4",
     "viem": "^2.44.4"

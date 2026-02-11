@@ -42,5 +42,5 @@ export const getAaveSupply = async (inputs: ActionInput, context: ExecutionConte
     });
 
     console.log(`      -> Supplied to Aave! Hash: ${txHash}`);
-    return { "AAVE_TX_HASH": txHash };
+    return { "TX_HASH": txHash };
 };

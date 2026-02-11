@@ -30,6 +30,6 @@ export const swapUniswap = async (inputs: ActionInput, context: ExecutionContext
     });
 
     console.log(`      -> Swap Submitted! Hash: ${txHash}`);
-    return { "SWAP_TX_HASH": txHash };
+    return { "TX_HASH": txHash };
 
 };

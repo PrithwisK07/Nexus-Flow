@@ -1,19 +1,21 @@
 import React, { useState, useRef, useEffect } from "react";
-import { X, Settings, Braces, ChevronRight, Variable } from "lucide-react";
+import {
+  X,
+  Settings,
+  Braces,
+  ChevronRight,
+  Activity,
+  Database,
+  Cpu,
+} from "lucide-react";
 import { NODE_TYPES, CATEGORY_COLORS } from "@/lib/nodeConfig";
-
-// --- SYSTEM VARIABLES (Always available) ---
-const SYSTEM_VARS = [
-  { name: "TX_HASH", desc: "Transaction Hash from previous step" },
-  { name: "ROW_INDEX", desc: "Current Row Number in Sheet" },
-  { name: "HTTP_RESPONSE", desc: "Result from HTTP Request" },
-];
 
 export default function PropertiesPanel({
   selectedNode,
   updateData,
   onClose,
   globalSettings,
+  nodes,
 }: any) {
   const type = selectedNode.data.type;
   const config = NODE_TYPES[type] || NODE_TYPES["math_operation"] || {};
@@ -23,7 +25,6 @@ export default function PropertiesPanel({
   const [activeField, setActiveField] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -41,28 +42,75 @@ export default function PropertiesPanel({
     updateData(selectedNode.id, { [field]: value });
   };
 
-  const insertVariable = (field: string, varName: string) => {
+  /**
+   * NEW: Handles Scoped Variable Insertion
+   * If nodeId is provided, it creates {{nodeId.varName}} to prevent collisions.
+   */
+  const insertVariable = (field: string, varName: string, nodeId?: string) => {
     const currentValue = currentData[field] || "";
-    const newValue = `${currentValue}{{${varName}}}`;
+    const formattedVar = nodeId ? `${nodeId}.${varName}` : varName;
+    const newValue = `${currentValue}{{${formattedVar}}}`;
     handleChange(field, newValue);
     setActiveField(null);
   };
 
+  // --- SMART VARIABLE DISCOVERY ---
   const getAvailableVariables = () => {
-    const vars = [];
-    if (globalSettings?.columnMapping) {
-      Object.entries(globalSettings.columnMapping).forEach(([col, name]) => {
-        vars.push({
-          name: name as string,
-          desc: `Mapped from Column ${String.fromCharCode(65 + Number(col))}`,
+    const vars: any[] = [];
+
+    // 1. ADD SHEET VARIABLES (Only if Sheet Trigger exists on canvas)
+    const hasSheetTrigger = nodes.some((n: any) => n.data.type === "sheets");
+
+    if (hasSheetTrigger) {
+      if (
+        globalSettings?.columnMapping &&
+        Object.keys(globalSettings.columnMapping).length > 0
+      ) {
+        Object.entries(globalSettings.columnMapping).forEach(([col, name]) => {
+          vars.push({
+            name: name as string,
+            desc: `Sheet Column ${String.fromCharCode(65 + Number(col))}`,
+            icon: "sheet",
+          });
         });
+      }
+      vars.push({
+        name: "ROW_INDEX",
+        desc: "Current Processing Row",
+        icon: "system",
       });
     }
-    if (vars.length === 0) {
-      vars.push({ name: "Column_A", desc: "Raw Column A" });
-      vars.push({ name: "Column_B", desc: "Raw Column B" });
-    }
-    return [...vars, ...SYSTEM_VARS];
+
+    // 2. SCAN ALL OTHER NODES FOR OUTPUTS (Scoped by Node ID)
+    nodes.forEach((node: any) => {
+      // Don't suggest outputs from the node currently being edited
+      if (node.id === selectedNode.id) return;
+
+      const nodeConfig = NODE_TYPES[node.data.type];
+
+      if (nodeConfig?.outputs) {
+        nodeConfig.outputs.forEach((out: any) => {
+          let varName = out.name;
+
+          // Resolve dynamic names (like JSON Extractor alias)
+          if (out.name === "dynamic" && out.sourceField) {
+            varName = node.data.config?.[out.sourceField];
+          }
+
+          if (varName) {
+            vars.push({
+              name: varName,
+              nodeId: node.id, // CRITICAL: Identify which node this belongs to
+              desc: `${out.desc}`,
+              sourceLabel: node.data.label || nodeConfig.label,
+              icon: "node",
+            });
+          }
+        });
+      }
+    });
+
+    return vars;
   };
 
   const variables = getAvailableVariables();
@@ -93,7 +141,6 @@ export default function PropertiesPanel({
         </button>
       </div>
 
-      {/* Form Fields */}
       <div className="p-6 overflow-y-auto flex-1 space-y-6">
         <div className="space-y-4">
           <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
@@ -116,7 +163,7 @@ export default function PropertiesPanel({
 
                 {input.type === "select" ? (
                   <select
-                    className="w-full p-2.5 bg-white border border-gray-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all shadow-sm cursor-pointer"
+                    className="w-full p-2.5 bg-white border border-gray-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm"
                     value={currentData[input.name] || ""}
                     onChange={(e) => handleChange(input.name, e.target.value)}
                   >
@@ -131,11 +178,9 @@ export default function PropertiesPanel({
                   </select>
                 ) : (
                   <div className="relative">
-                    {/* Input Field */}
                     {input.type === "textarea" ? (
                       <textarea
-                        // Added pr-10 to prevent text from going under the button
-                        className="w-full p-2.5 pr-10 bg-white border border-gray-300 rounded-lg text-sm text-slate-900 h-24 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-none shadow-sm placeholder:text-slate-400 font-mono leading-relaxed"
+                        className="w-full p-2.5 bg-white border border-gray-300 rounded-lg text-sm text-slate-900 h-24 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all resize-none shadow-sm font-mono"
                         placeholder={input.placeholder || ""}
                         value={currentData[input.name] || ""}
                         onChange={(e) =>
@@ -145,8 +190,7 @@ export default function PropertiesPanel({
                     ) : (
                       <input
                         type={input.type}
-                        // Added pr-10 here as well
-                        className="w-full p-2.5 pr-10 bg-white border border-gray-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all shadow-sm placeholder:text-slate-400 font-mono"
+                        className="w-full p-2.5 pr-8 bg-white border border-gray-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm font-mono"
                         placeholder={input.placeholder || ""}
                         value={currentData[input.name] || ""}
                         readOnly={input.readOnly}
@@ -156,7 +200,7 @@ export default function PropertiesPanel({
                       />
                     )}
 
-                    {/* --- IMPROVED VARIABLE BUTTON --- */}
+                    {/* Variable Picker Trigger */}
                     {!input.readOnly &&
                       (input.type === "text" || input.type === "textarea") && (
                         <button
@@ -165,66 +209,72 @@ export default function PropertiesPanel({
                               activeField === input.name ? null : input.name,
                             )
                           }
-                          // Dynamic Positioning based on input type
-                          className={`
-                            absolute right-2 
-                            ${input.type === "textarea" ? "top-2" : "top-1/2 -translate-y-1/2"}
-                            p-1.5 rounded-md border shadow-sm transition-all duration-200 group/btn
-                            flex items-center gap-1
-                            ${
-                              activeField === input.name
-                                ? "bg-indigo-50 border-indigo-200 text-indigo-600 shadow-indigo-100"
-                                : "bg-white border-gray-200 text-slate-400 hover:border-indigo-300 hover:text-indigo-600 hover:shadow-md"
-                            }
-                          `}
-                          title="Insert Variable"
+                          className="absolute right-2 top-2 p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
                         >
-                          <Variable size={14} strokeWidth={2.5} />
-                          {/* Optional Tooltip/Text on Hover */}
-                          <span
-                            className={`text-[9px] font-bold ${activeField === input.name ? "block" : "hidden group-hover/btn:block"}`}
-                          >
-                            VAR
-                          </span>
+                          <Braces size={14} />
                         </button>
                       )}
 
-                    {/* Dropdown Menu */}
+                    {/* Variable Dropdown */}
                     {activeField === input.name && (
                       <div
                         ref={dropdownRef}
-                        className="absolute right-0 top-full mt-1.5 w-72 bg-white border border-gray-200 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 ring-1 ring-black/5"
+                        className="absolute right-0 top-full mt-1 w-80 bg-white border border-gray-200 rounded-lg shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100"
                       >
-                        <div className="bg-slate-50/80 backdrop-blur-sm px-4 py-2.5 border-b border-gray-100 flex items-center gap-2">
-                          <Braces size={12} className="text-indigo-500" />
-                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                            Available Variables
+                        <div className="bg-slate-50 px-3 py-2 border-b border-gray-200 text-[10px] font-bold text-slate-500 uppercase flex justify-between">
+                          <span>Insert Data Variable</span>
+                          <span className="text-indigo-500">
+                            {variables.length} available
                           </span>
                         </div>
 
-                        <div className="max-h-56 overflow-y-auto p-1.5 space-y-0.5">
-                          {variables.map((v) => (
-                            <button
-                              key={v.name}
-                              onClick={() => insertVariable(input.name, v.name)}
-                              className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-indigo-50 flex items-center justify-between group/item transition-all duration-150 border border-transparent hover:border-indigo-100"
-                            >
-                              <div className="flex flex-col gap-0.5">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-xs font-bold text-slate-700 font-mono bg-slate-100 px-1.5 py-0.5 rounded text-[10px] group-hover/item:bg-white group-hover/item:text-indigo-600 transition-colors">
-                                    {v.name}
+                        <div className="max-h-64 overflow-y-auto">
+                          {variables.length === 0 ? (
+                            <div className="p-6 text-center text-xs text-slate-400 italic">
+                              No available output variables found. Add
+                              data-generating nodes (Price, Contract, etc.) to
+                              the canvas.
+                            </div>
+                          ) : (
+                            variables.map((v, idx) => (
+                              <button
+                                key={`${v.name}-${idx}`}
+                                onClick={() =>
+                                  insertVariable(input.name, v.name, v.nodeId)
+                                }
+                                className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-3 transition-colors border-b border-gray-50 last:border-0 group/item"
+                              >
+                                <div
+                                  className={`p-2 rounded-lg shrink-0 ${v.icon === "sheet" ? "bg-emerald-50 text-emerald-600" : "bg-indigo-50 text-indigo-600"}`}
+                                >
+                                  {v.icon === "sheet" ? (
+                                    <Database size={14} />
+                                  ) : (
+                                    <Cpu size={14} />
+                                  )}
+                                </div>
+                                <div className="flex flex-col min-w-0 flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-bold text-slate-700 font-mono truncate group-hover/item:text-indigo-600">
+                                      {v.name}
+                                    </span>
+                                    {v.nodeId && (
+                                      <span className="text-[9px] bg-slate-100 text-slate-500 px-1 rounded uppercase font-bold">
+                                        {v.sourceLabel}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="text-[10px] text-slate-400 truncate">
+                                    {v.desc}
                                   </span>
                                 </div>
-                                <span className="text-[10px] text-slate-400 pl-0.5 truncate max-w-[180px]">
-                                  {v.desc}
-                                </span>
-                              </div>
-                              <ChevronRight
-                                size={14}
-                                className="text-slate-300 opacity-0 -translate-x-2 group-hover/item:opacity-100 group-hover/item:translate-x-0 transition-all duration-200"
-                              />
-                            </button>
-                          ))}
+                                <ChevronRight
+                                  size={14}
+                                  className="text-slate-300 group-hover/item:text-indigo-400"
+                                />
+                              </button>
+                            ))
+                          )}
                         </div>
                       </div>
                     )}
@@ -234,13 +284,24 @@ export default function PropertiesPanel({
             ))}
 
           {(!config.inputs || config.inputs.length === 0) && (
-            <div className="text-center py-10 bg-slate-50 rounded-xl border-2 border-dashed border-slate-100">
-              <p className="text-sm text-slate-400 font-medium">
-                No configuration needed.
+            <div className="text-center py-12 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
+              <Activity className="mx-auto text-slate-300 mb-2" size={24} />
+              <p className="text-sm text-slate-400 px-4 text-balance">
+                This node operates automatically and requires no manual
+                configuration.
               </p>
             </div>
           )}
         </div>
+      </div>
+
+      {/* Footer hint */}
+      <div className="p-4 bg-slate-50 border-t border-gray-100">
+        <p className="text-[10px] text-slate-400 leading-relaxed text-center">
+          Variables used as{" "}
+          <code className="text-indigo-500 font-bold">{"{{ID.Var}}"}</code> are
+          automatically resolved during workflow execution.
+        </p>
       </div>
     </div>
   );

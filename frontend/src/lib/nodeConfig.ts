@@ -1,7 +1,7 @@
 import { 
   Zap, ArrowRightLeft, Database, Calculator, MessageSquare, Mail, 
   FileSpreadsheet, Layers, Search, Globe, Rss, Fingerprint, 
-  Variable, FileJson, Calendar, Flame, Send
+  Variable, FileJson, Calendar, Flame, Send, GitMerge
 } from 'lucide-react';
 
 export const CATEGORY_COLORS: Record<string, any> = {
@@ -26,6 +26,7 @@ export const NODE_TYPES: Record<string, any> = {
       { name: 'colIndex', label: 'Column Index (0=A)', type: 'number', placeholder: '4' },
       { name: 'value', label: 'Trigger Value', type: 'text', placeholder: 'Pending' }
     ]
+    // Note: Sheet variables are handled dynamically via Global Settings Mapping
   },
 
   // --- WEB3 ---
@@ -35,9 +36,9 @@ export const NODE_TYPES: Record<string, any> = {
       { name: 'toAddress', label: 'To Address', type: 'text', placeholder: '0x... or {{Wallet}}' },
       { name: 'amount', label: 'Amount', type: 'text', placeholder: '1.5' },
       { name: 'currency', label: 'Token Symbol', type: 'text', placeholder: 'ETH, USDC...' },
-      // Optional: Backend defaults to 18 if missing
       { name: 'decimals', label: 'Decimals (Opt)', type: 'number', placeholder: '18', required: false },
-    ]
+    ],
+    outputs: [{ name: 'TX_HASH', desc: 'Transaction Hash' }]
   },
   'swap_uniswap': { 
     label: 'Uniswap Swap', category: 'web3', icon: ArrowRightLeft,
@@ -47,7 +48,8 @@ export const NODE_TYPES: Record<string, any> = {
       { name: 'amountIn', label: 'Amount', type: 'text', placeholder: '100' },
       { name: 'recipient', label: 'Recipient', type: 'text', placeholder: '0x...' },
       { name: 'tokenInDecimals', label: 'In Decimals', type: 'number', placeholder: '18', required: false },
-    ]
+    ],
+    outputs: [{ name: 'TX_HASH', desc: 'Swap Transaction Hash' }]
   },
   'aave_supply': { 
     label: 'Aave Supply', category: 'web3', icon: Layers,
@@ -55,16 +57,17 @@ export const NODE_TYPES: Record<string, any> = {
       { name: 'asset', label: 'Asset Address', type: 'text', placeholder: '0x...' },
       { name: 'amount', label: 'Amount', type: 'text' },
       { name: 'onBehalfOf', label: 'On Behalf Of', type: 'text', placeholder: '0x...' },
-    ]
+    ],
+    outputs: [{ name: 'TX_HASH', desc: 'Supply Transaction Hash' }]
   },
   'read_contract': { 
     label: 'Read Contract', category: 'web3', icon: Search,
     inputs: [
       { name: 'contractAddress', label: 'Contract', type: 'text' },
-      { name: 'functionSignature', label: 'Function Sig', type: 'text', placeholder: 'balanceOf(address)' },
-      // Optional: Functions like totalSupply() have no args
+      { name: 'functionSignature', label: 'Function Sig', type: 'text', placeholder: 'function balanceOf(address) view returns (uint256)' },
       { name: 'args', label: 'Args (Comma Sep)', type: 'text', placeholder: '0x123', required: false },
-    ]
+    ],
+    outputs: [{ name: 'CONTRACT_RESULT', desc: 'Value read from blockchain' }]
   },
   'write_contract': { 
     label: 'Write Contract', category: 'web3', icon: Fingerprint,
@@ -72,37 +75,41 @@ export const NODE_TYPES: Record<string, any> = {
       { name: 'contractAddress', label: 'Contract', type: 'text' },
       { name: 'functionSignature', label: 'Function Sig', type: 'text', placeholder: 'approve(address,uint256)' },
       { name: 'args', label: 'Args (Comma Sep)', type: 'text', required: false },
-      // Optional: Non-payable functions don't need value
       { name: 'value', label: 'ETH Value (Wei)', type: 'text', placeholder: '0', required: false },
-    ]
+    ],
+    outputs: [{ name: 'TX_HASH', desc: 'Transaction Hash' }]
   },
   'resolve_ens': { 
     label: 'Resolve ENS', category: 'web3', icon: Search,
-    inputs: [{ name: 'domain', label: 'ENS Domain', type: 'text', placeholder: 'vitalik.eth' }] 
+    inputs: [{ name: 'domain', label: 'ENS Domain', type: 'text', placeholder: 'vitalik.eth' }],
+    outputs: [{ name: 'ENS_ADDRESS', desc: 'Resolved Wallet Address' }]
   },
   'get_gas_price': { 
     label: 'Get Gas Price', category: 'data', icon: Flame,
-    inputs: [] 
+    inputs: [],
+    outputs: [{ name: 'GAS_PRICE', desc: 'Current Gas (Gwei)' }] 
   },
 
   // --- DATA ---
   'get_price': { 
     label: 'Get Token Price', category: 'data', icon: Database,
-    inputs: [{ name: 'tokenId', label: 'Coingecko ID', type: 'text', placeholder: 'ethereum' }] 
+    inputs: [{ name: 'tokenId', label: 'Coingecko ID', type: 'text', placeholder: 'ethereum' }],
+    outputs: [{ name: 'PRICE', desc: 'Token Price (USD)' }]
   },
   'http_request': { 
     label: 'HTTP Request', category: 'data', icon: Globe,
     inputs: [
       { name: 'url', label: 'URL', type: 'text' },
       { name: 'method', label: 'Method', type: 'select', options: ['GET', 'POST', 'PUT', 'DELETE'] },
-      // Optional: GET requests often have no body
       { name: 'body', label: 'Body (JSON)', type: 'textarea', required: false },
       { name: 'headers', label: 'Headers (JSON)', type: 'textarea', required: false },
-    ]
+    ],
+    outputs: [{ name: 'HTTP_RESPONSE', desc: 'API Response Data' }]
   },
   'read_rss': { 
     label: 'Read RSS Feed', category: 'data', icon: Rss,
-    inputs: [{ name: 'url', label: 'RSS URL', type: 'text' }] 
+    inputs: [{ name: 'url', label: 'RSS URL', type: 'text' }],
+    outputs: [{ name: 'RSS_ITEM', desc: 'Latest RSS Item' }]
   },
 
   // --- LOGIC ---
@@ -112,36 +119,39 @@ export const NODE_TYPES: Record<string, any> = {
       { name: 'valueA', label: 'Value A', type: 'text' },
       { name: 'operation', label: 'Operation', type: 'select', options: ['add', 'subtract', 'multiply', 'divide', 'percent'] },
       { name: 'valueB', label: 'Value B', type: 'text' },
-    ]
+    ],
+    outputs: [{ name: 'MATH_RESULT', desc: 'Calculation Result' }]
   },
   'transform_data': { 
     label: 'Transform Data', category: 'logic', icon: Variable,
     inputs: [
       { name: 'value', label: 'Input Value', type: 'text' },
       { name: 'operation', label: 'Operation', type: 'select', options: ['upper', 'lower', 'replace', 'parse_number'] },
-      // Optional: 'upper'/'lower' need no param
       { name: 'param', label: 'Param (e.g. search)', type: 'text', required: false },
       { name: 'replaceValue', label: 'Replace With', type: 'text', required: false },
-    ]
+    ],
+    outputs: [{ name: 'TRANSFORM_RESULT', desc: 'Transformed Text' }]
   },
   'json_extract': { 
     label: 'JSON Extractor', category: 'logic', icon: FileJson,
     inputs: [
       { name: 'data', label: 'JSON Data', type: 'text', placeholder: '{{HTTP_RESPONSE}}' },
       { name: 'path', label: 'Path', type: 'text', placeholder: 'data.price' },
-      // Optional: Backend has a default output name
       { name: 'outputVar', label: 'Output Alias', type: 'text', placeholder: 'MY_VAR', required: false },
-    ]
+    ],
+    // Special case: The UI uses the 'sourceField' to name the variable dynamically
+    outputs: [{ name: 'dynamic', sourceField: 'outputVar', desc: 'Extracted Value' }]
   },
   'format_date': { 
     label: 'Format Date', category: 'logic', icon: Calendar,
     inputs: [
       { name: 'value', label: 'Timestamp', type: 'text' },
       { name: 'format', label: 'Format', type: 'text', placeholder: 'YYYY-MM-DD', required: false },
-    ]
+    ],
+    outputs: [{ name: 'FORMATTED_DATE', desc: 'Formatted Date String' }]
   },
 
-  // --- NOTIFY & OPS ---
+  // --- NOTIFY & OPS (No outputs usually) ---
   'discord_notify': { 
     label: 'Discord Msg', category: 'notify', icon: MessageSquare,
     inputs: [
@@ -174,5 +184,27 @@ export const NODE_TYPES: Record<string, any> = {
       { name: 'colIndex', label: 'Col Index (0=A)', type: 'number', placeholder: '5' },
       { name: 'value', label: 'Value to Write', type: 'text', placeholder: 'Done' },
     ]
+  },
+  'condition': {
+    label: 'If / Else', 
+    category: 'logic', 
+    icon: Calculator,
+    inputs: [
+      { name: 'variable', label: 'Variable', type: 'text', placeholder: '{{Price}}' },
+      { name: 'operator', label: 'Operator', type: 'select', options: ['==', '!=', '>', '<', '>=', '<=', 'contains'] },
+      { name: 'value', label: 'Value', type: 'text', placeholder: '2000' }
+    ]
+  },
+  'merge': {
+    label: 'Merge / Wait', 
+    category: 'logic', 
+    icon: GitMerge,
+    config: { description: 'Waits for all inputs to complete' },
+    inputs: [
+      // No inputs needed! It just exists to join paths.
+      // But we can add a dummy read-only field for clarity.
+      { name: '_info', label: 'Behavior', type: 'text', placeholder: 'Waits for all branches', readOnly: true }
+    ],
+    outputs: [] // No specific outputs, it passes context through
   },
 };

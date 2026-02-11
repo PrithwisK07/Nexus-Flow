@@ -12,6 +12,7 @@ import { sendEmail } from "./emailSend.js";
 import { resolveENS } from "./resolveENS.js";
 import { httpReq } from "./httpReq.js";
 import { extractJson } from "./jsonExtractor.js";
+import { mergeNode } from "./mergeNodes.js";
 
 export const NODE_REGISTRY: Record<string, Function> = {
     "transfer": transfer,    
@@ -28,4 +29,5 @@ export const NODE_REGISTRY: Record<string, Function> = {
     "resolve_ens": resolveENS,
     "http_request": httpReq,
     "json_extract": extractJson,
+    "merge": mergeNode,
 };

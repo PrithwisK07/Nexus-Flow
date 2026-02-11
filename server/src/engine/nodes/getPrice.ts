@@ -18,5 +18,5 @@ export const getPriceCoinGecko = async (inputs: ActionInput, context: ExecutionC
     const price = data[tokenId].usd;
     console.log(`      -> Price is $${price}`);
 
-    return { [`${tokenId.toUpperCase()}_PRICE`]: price };
+    return { [`PRICE`]: price };
 };

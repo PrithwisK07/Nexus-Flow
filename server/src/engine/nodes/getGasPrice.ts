@@ -17,6 +17,6 @@ export const getGasPrice = async () => {
     console.log(`      -> Current Gas: ${gweiPrice} Gwei`);
 
     return {
-        "GAS_PRICE_GWEI": Number(gweiPrice)
+        "GAS_PRICE": Number(gweiPrice)
     };
 }

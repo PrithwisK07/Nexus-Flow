@@ -8,19 +8,32 @@ type ActionInput = Record<string, any>;
 
 export const writeContract = async (inputs: ActionInput, context: ExecutionContext) => {
     const address = Sanitize.address(resolveVariable(inputs.contractAddress, context));
-    const signature = resolveVariable(inputs.functionSignature, context);
-    let args = inputs.args || [];
+    
+    let signature = resolveVariable(inputs.functionSignature, context);
+    if (!signature.startsWith("function ")) signature = `function ${signature}`;
 
-    if (typeof args === "string" && (args as string).includes(",")) {
-        args = (args as string).split(",").map(s => s.trim());
+    // --- FIX STARTS HERE ---
+    let rawArgs = inputs.args || [];
+    let args: any[] = [];
+
+    if (typeof rawArgs === "string") {
+        if (rawArgs.trim() === "") {
+            args = [];
+        } else if (rawArgs.includes(",")) {
+            args = rawArgs.split(",").map((s) => s.trim());
+        } else {
+            args = [rawArgs.trim()]; // CRITICAL FIX
+        }
+    } else if (Array.isArray(rawArgs)) {
+        args = rawArgs;
     }
+
+    args = Sanitize.array(args).map(arg => resolveVariable(arg, context));
+    // --- FIX ENDS HERE ---
 
     console.log(`   ✍️ Executing Contract Writer: ${signature} on ${address}`);
 
-    args = Sanitize.array(args).map(arg => resolveVariable(arg, context));
-
     const abi = parseAbi([signature]);
-        
     const funcName = signature.split("function ")[1].split("(")[0].trim();
 
     const data = encodeFunctionData({
@@ -38,5 +51,5 @@ export const writeContract = async (inputs: ActionInput, context: ExecutionConte
     });
 
     console.log(`      -> Transaction Sent! Hash: ${txHash}`);
-    return { "WRITE_TX_HASH": txHash };
+    return { "TX_HASH": txHash };
 };
