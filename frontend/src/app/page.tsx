@@ -23,6 +23,7 @@ import ReactFlow, {
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { Toaster, toast } from "sonner";
+import { io } from "socket.io-client"; // <--- IMPORT SOCKET.IO
 
 import {
   Save,
@@ -32,8 +33,8 @@ import {
   Search,
   Loader2,
   Settings,
-  LayoutGrid, // Import Icon
-  LayoutList, // Import Icon
+  LayoutGrid,
+  LayoutList,
 } from "lucide-react";
 
 import NexusNode from "@/components/flow/NexusNode";
@@ -44,8 +45,11 @@ import SettingsModal from "@/components/SettingsModal";
 import { useUndoRedo } from "@/hooks/useUndoRedo";
 import { useDeployment } from "@/hooks/useDeployment";
 import { NODE_TYPES, CATEGORY_COLORS } from "@/lib/nodeConfig";
-// 1. Import Context
 import { FlowContext } from "@/components/flow/FlowContext";
+
+// --- SOCKET CONNECTION ---
+// Initialize outside component to avoid reconnects on re-renders
+const socket = io("http://localhost:3001");
 
 const nodeTypes = { nexusNode: NexusNode };
 
@@ -72,12 +76,10 @@ const CATEGORY_HEX: Record<string, string> = {
 };
 
 export default function NexusFlowPage() {
-  // 2. Manage View State Here
   const [isCompact, setIsCompact] = useState(false);
 
   return (
     <ReactFlowProvider>
-      {/* 3. Wrap Canvas in Context Provider */}
       <FlowContext.Provider
         value={{ isCompact, toggleCompact: () => setIsCompact(!isCompact) }}
       >
@@ -105,15 +107,78 @@ function NexusCanvas() {
     name: "My Workflow",
     spreadsheetId: "",
   });
+
+  // Track active execution
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+
   const { deploy, isDeploying } = useDeployment();
   const { takeSnapshot, undo, redo } = useUndoRedo(nodes, edges);
 
   const [defaultEdgeType, setDefaultEdgeType] = useState<any>("smoothstep");
   const [defaultEdgePattern, setDefaultEdgePattern] = useState<any>("solid");
 
-  // 4. Consume Context
   const { isCompact, toggleCompact } = useContext(FlowContext);
 
+  // --- 1. REAL-TIME EXECUTION LISTENER ---
+  useEffect(() => {
+    socket.on("workflow_update", (event) => {
+      const { type, nodeId, result, error } = event;
+
+      // If this update belongs to a different job, ignore (optional safety)
+      // if (activeJobId && event.jobId !== activeJobId) return;
+
+      setEdges((eds) =>
+        eds.map((edge) => {
+          // A. NODE STARTED -> Arrow becomes Amber + Dotted + Moving
+          if (type === "node_started" && edge.target === nodeId) {
+            return {
+              ...edge,
+              animated: true,
+              style: {
+                ...edge.style,
+                stroke: "#fbbf24", // Amber
+                strokeWidth: 2,
+                strokeDasharray: "5,5",
+              },
+            };
+          }
+          // B. NODE SUCCESS -> Arrow becomes Green + Solid + Static
+          if (type === "node_completed" && edge.target === nodeId) {
+            return {
+              ...edge,
+              animated: false,
+              style: {
+                ...edge.style,
+                stroke: "#10b981", // Green
+                strokeWidth: 3,
+                strokeDasharray: "0",
+              },
+            };
+          }
+          // C. NODE FAILED -> Arrow becomes Red + Solid
+          if (type === "node_failed" && edge.target === nodeId) {
+            return {
+              ...edge,
+              animated: false,
+              style: {
+                ...edge.style,
+                stroke: "#ef4444", // Red
+                strokeWidth: 3,
+                strokeDasharray: "0",
+              },
+            };
+          }
+          return edge;
+        }),
+      );
+    });
+
+    return () => {
+      socket.off("workflow_update");
+    };
+  }, [setEdges]); // activeJobId removed from dependency to avoid re-binding
+
+  // Undo/Redo Logic
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
@@ -140,7 +205,22 @@ function NexusCanvas() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [undo, redo, nodes, edges, setNodes, setEdges]);
 
+  // --- 2. UPDATED DEPLOY HANDLER ---
   const handleDeploy = async () => {
+    // Reset edges to default state before new run
+    setEdges((eds) =>
+      eds.map((e) => ({
+        ...e,
+        animated: false,
+        style: {
+          ...e.style,
+          stroke: "#6366f1",
+          strokeWidth: 2,
+          strokeDasharray: "0",
+        },
+      })),
+    );
+
     const promise = deploy(globalSettings.name, globalSettings);
     const result = await promise;
 
@@ -150,6 +230,14 @@ function NexusCanvas() {
         duration: 4000,
       });
       console.log("Server Response:", result.data);
+
+      // Subscribe to real-time updates for this Job ID
+      if (result.data && result.data.jobId) {
+        const jobId = result.data.jobId;
+        setActiveJobId(jobId);
+        socket.emit("subscribe_job", jobId);
+        toast.info("Watching execution...", { duration: 2000 });
+      }
     } else {
       toast.error("Deployment Failed", {
         description: result.error || "An unknown error occurred.",
@@ -472,7 +560,7 @@ function NexusCanvas() {
           </div>
 
           <div className="flex gap-3 relative">
-            {/* 5. ADDED VIEW TOGGLE BUTTONS */}
+            {/* View Toggle Buttons */}
             <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 mr-2">
               <button
                 onClick={() => isCompact && toggleCompact()}

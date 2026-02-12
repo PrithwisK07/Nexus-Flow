@@ -31,6 +31,7 @@
     "ioredis": "^5.9.2",
     "nodemailer": "^7.0.12",
     "permissionless": "^0.3.4",
+    "socket.io": "^4.8.3",
     "viem": "^2.44.4"
   }
 }

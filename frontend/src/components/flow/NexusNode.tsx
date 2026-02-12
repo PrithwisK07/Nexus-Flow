@@ -81,10 +81,23 @@ const NexusNode = ({ data, selected }: NodeProps) => {
           >
             <Icon size={20} strokeWidth={1.5} />
           </div>
+
+          {/* Validation Error Badge */}
           {!isValid && (
             <div className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 border-2 border-white shadow-sm">
               <AlertCircle size={8} />
             </div>
+          )}
+
+          {/* Test Button (Hover) */}
+          {isValid && config.category !== "trigger" && (
+            <button
+              onClick={onTestClick}
+              className="absolute -top-2 -right-2 bg-slate-800 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100 hover:bg-indigo-600 shadow-lg z-30"
+              title="Test Node"
+            >
+              <Play size={8} fill="currentColor" />
+            </button>
           )}
         </div>
 
