@@ -37,17 +37,26 @@ export const transfer = async (inputs: ActionInput, context: ExecutionContext) =
         const response = await sendTestTransaction(nexusClient, to, amt.toString(), curr);
         
         if (typeof response === 'object' && response.success === false) {
-         throw new Error(`Transaction Execution Failed`);
-    }
+             throw new Error(`Transaction Execution Failed`);
+        }
 
         const txHash = response.hash;
+        
+        // --- NEW: Generate Explorer Link ---
+        const explorerLink = `https://sepolia.etherscan.io/tx/${txHash}`;
+        console.log(`      🔗 View on Etherscan: ${explorerLink}`);
+
         context["TX_HASH"] = txHash; 
         console.log(`   ✅ Transaction complete: ${txHash}`);
 
-        return { "TX_HASH": txHash, "STATUS": "Success" };
+        return { 
+            "TX_HASH": txHash, 
+            "EXPLORER_LINK": explorerLink,
+            "STATUS": "Success" 
+        };
 
     } catch (err: any) {
         console.error(`   ❌ Transfer Failed: ${err.message}`);
-        return { "STATUS": "Failed" };
+        return { "STATUS": "Failed", "ERROR": err.message };
     }
 }

@@ -41,6 +41,14 @@ export const getAaveSupply = async (inputs: ActionInput, context: ExecutionConte
         data: data
     });
 
+    // --- NEW: Generate Explorer Link ---
+    const explorerLink = `https://sepolia.etherscan.io/tx/${txHash}`;
+
     console.log(`      -> Supplied to Aave! Hash: ${txHash}`);
-    return { "TX_HASH": txHash };
+    console.log(`      🔗 View on Etherscan: ${explorerLink}`);
+
+    return { 
+        "TX_HASH": txHash,
+        "EXPLORER_LINK": explorerLink
+    };
 };

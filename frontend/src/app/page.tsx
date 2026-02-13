@@ -124,9 +124,40 @@ function NexusCanvas() {
     socket.on("workflow_update", (event) => {
       const { type, nodeId, result, error } = event;
 
-      // If this update belongs to a different job, ignore (optional safety)
-      // if (activeJobId && event.jobId !== activeJobId) return;
+      // A. NEW: Update Node State to trigger the Popover and Rings
+      setNodes((nds) =>
+        nds.map((node) => {
+          if (node.id === nodeId) {
+            if (type === "node_started") {
+              return {
+                ...node,
+                data: { ...node.data, executionData: { status: "running" } },
+              };
+            }
+            if (type === "node_completed") {
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  executionData: { status: "success", result },
+                },
+              };
+            }
+            if (type === "node_failed") {
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  executionData: { status: "failed", error },
+                },
+              };
+            }
+          }
+          return node;
+        }),
+      );
 
+      // B. EXISTING: Update Edges (Arrows)
       setEdges((eds) =>
         eds.map((edge) => {
           // A. NODE STARTED -> Arrow becomes Amber + Dotted + Moving
@@ -176,7 +207,7 @@ function NexusCanvas() {
     return () => {
       socket.off("workflow_update");
     };
-  }, [setEdges]); // activeJobId removed from dependency to avoid re-binding
+  }, [setEdges, setNodes]);
 
   // Undo/Redo Logic
   useEffect(() => {
@@ -207,7 +238,7 @@ function NexusCanvas() {
 
   // --- 2. UPDATED DEPLOY HANDLER ---
   const handleDeploy = async () => {
-    // Reset edges to default state before new run
+    // A. Reset edges to default state before new run
     setEdges((eds) =>
       eds.map((e) => ({
         ...e,
@@ -218,6 +249,14 @@ function NexusCanvas() {
           strokeWidth: 2,
           strokeDasharray: "0",
         },
+      })),
+    );
+
+    // B. NEW: Reset node execution states before new run
+    setNodes((nds) =>
+      nds.map((n) => ({
+        ...n,
+        data: { ...n.data, executionData: null },
       })),
     );
 

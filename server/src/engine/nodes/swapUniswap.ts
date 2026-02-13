@@ -29,7 +29,14 @@ export const swapUniswap = async (inputs: ActionInput, context: ExecutionContext
         data: calldata
     });
 
-    console.log(`      -> Swap Submitted! Hash: ${txHash}`);
-    return { "TX_HASH": txHash };
+    // --- NEW: Generate Explorer Link ---
+    const explorerLink = `https://sepolia.etherscan.io/tx/${txHash}`;
 
+    console.log(`      -> Swap Submitted! Hash: ${txHash}`);
+    console.log(`      🔗 View on Etherscan: ${explorerLink}`);
+
+    return { 
+        "TX_HASH": txHash,
+        "EXPLORER_LINK": explorerLink
+    };
 };

@@ -2,11 +2,10 @@ import React, { memo, useMemo } from "react";
 import { Handle, Position, NodeProps } from "reactflow";
 import { AlertCircle, Play, GitMerge } from "lucide-react";
 import { NODE_TYPES, CATEGORY_COLORS } from "@/lib/nodeConfig";
-// 1. Import the hook
 import { useFlowContext } from "./FlowContext";
+import NodeExecutionStatus from "../NodeExecutionStatus"; // <-- Import the new Status Component
 
-const NexusNode = ({ data, selected }: NodeProps) => {
-  // 2. Consume the state
+const NexusNode = ({ id, data, selected }: NodeProps) => {
   const { isCompact } = useFlowContext();
 
   const type = data.type || "webhook";
@@ -32,6 +31,18 @@ const NexusNode = ({ data, selected }: NodeProps) => {
   const handleClasses =
     "w-2 h-2 rounded-full border border-white transition-all duration-200";
 
+  // --- NEW: Execution Status Styles ---
+  const execStatus = data.executionData?.status;
+  let execStyles = "";
+  if (execStatus === "running") {
+    execStyles =
+      "!ring-4 !ring-amber-400/50 !border-amber-500 animate-pulse z-20";
+  } else if (execStatus === "success") {
+    execStyles = "!ring-4 !ring-emerald-500/30 !border-emerald-500 z-20";
+  } else if (execStatus === "failed") {
+    execStyles = "!ring-4 !ring-red-500/30 !border-red-500 z-20";
+  }
+
   // --- SPECIAL RENDER: MERGE NODE (Always Circle) ---
   if (type === "merge") {
     return (
@@ -39,10 +50,13 @@ const NexusNode = ({ data, selected }: NodeProps) => {
         className={`
           relative w-12 h-12 rounded-full bg-white border-2 shadow-md transition-all duration-200 group
           ${selected ? "ring-2 ring-indigo-500 border-indigo-500 scale-110 z-10" : "border-slate-300"}
+          ${execStyles}
           hover:shadow-lg hover:border-indigo-400
         `}
         title="Merge / Wait"
       >
+        <NodeExecutionStatus nodeId={id} executionData={data.executionData} />
+
         <div className="absolute inset-0 flex items-center justify-center text-slate-600">
           {Icon ? <Icon size={20} /> : <GitMerge size={20} />}
         </div>
@@ -69,11 +83,15 @@ const NexusNode = ({ data, selected }: NodeProps) => {
   if (isCompact) {
     return (
       <div className="relative group flex flex-col items-center">
+        {/* Render the Execution Popover above the compact node */}
+        <NodeExecutionStatus nodeId={id} executionData={data.executionData} />
+
         <div
           className={`
             relative w-12 h-12 flex items-center justify-center rounded-2xl bg-white shadow-sm transition-all duration-300 ease-out z-10
             ${selected ? "ring-2 ring-indigo-500 ring-offset-2 border-transparent scale-105" : "border border-slate-200 hover:border-indigo-300 hover:shadow-md hover:-translate-y-0.5"}
             ${!isValid ? "!border-red-400" : ""}
+            ${execStyles}
           `}
         >
           <div
@@ -167,8 +185,12 @@ const NexusNode = ({ data, selected }: NodeProps) => {
         relative shadow-xl rounded-xl border-2 min-w-[240px] bg-white transition-all duration-200 group
         ${selected ? "ring-2 ring-indigo-500 border-indigo-500 scale-105 z-10" : ""}
         ${!isValid ? "border-red-400 ring-2 ring-red-100" : colors.border}
+        ${execStyles}
       `}
     >
+      {/* Render Execution Popover */}
+      <NodeExecutionStatus nodeId={id} executionData={data.executionData} />
+
       {!isValid && (
         <div className="absolute -top-3 -right-3 z-20 bg-red-500 text-white p-1 rounded-full shadow-md animate-bounce">
           <AlertCircle size={16} />

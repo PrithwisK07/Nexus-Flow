@@ -12,7 +12,6 @@ export const writeContract = async (inputs: ActionInput, context: ExecutionConte
     let signature = resolveVariable(inputs.functionSignature, context);
     if (!signature.startsWith("function ")) signature = `function ${signature}`;
 
-    // --- FIX STARTS HERE ---
     let rawArgs = inputs.args || [];
     let args: any[] = [];
 
@@ -22,14 +21,13 @@ export const writeContract = async (inputs: ActionInput, context: ExecutionConte
         } else if (rawArgs.includes(",")) {
             args = rawArgs.split(",").map((s) => s.trim());
         } else {
-            args = [rawArgs.trim()]; // CRITICAL FIX
+            args = [rawArgs.trim()];
         }
     } else if (Array.isArray(rawArgs)) {
         args = rawArgs;
     }
 
     args = Sanitize.array(args).map(arg => resolveVariable(arg, context));
-    // --- FIX ENDS HERE ---
 
     console.log(`   ✍️ Executing Contract Writer: ${signature} on ${address}`);
 
@@ -50,6 +48,14 @@ export const writeContract = async (inputs: ActionInput, context: ExecutionConte
         data: data
     });
 
+    // --- NEW: Generate Explorer Link ---
+    const explorerLink = `https://sepolia.etherscan.io/tx/${txHash}`;
+
     console.log(`      -> Transaction Sent! Hash: ${txHash}`);
-    return { "TX_HASH": txHash };
+    console.log(`      🔗 View on Etherscan: ${explorerLink}`);
+
+    return { 
+        "TX_HASH": txHash,
+        "EXPLORER_LINK": explorerLink
+    };
 };
