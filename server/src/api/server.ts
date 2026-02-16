@@ -19,7 +19,7 @@ const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
         origin: "*", // Allow Frontend to connect
-        methods: ["GET", "POST"]
+        methods: ["GET", "POST", "PUT", "DELETE"]
     }
 });
 
@@ -77,14 +77,81 @@ app.post("/trigger-workflow", async (req, res) => {
     try {
         console.log(`\n📥 Received Job: [${workflowConfig.trigger.type.toUpperCase()}]`);
 
-        // Add to Redis Queue
-        const job = await workflowQueue.add('execute-workflow', {
-            config: workflowConfig,
-            context: manualContext,
-            requestedAt: new Date().toISOString()
-        });
+        // Create a persistent ID based on workflow name or timestamp
+        const safeName = (workflowConfig.workflowName || "default").replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+        const isTimer = workflowConfig.trigger && workflowConfig.trigger.type === 'timer';
+        const workflowId = isTimer ? `cron_workflow_${safeName}` : `job_${Date.now()}`;
 
-        console.log(`   ✅ Queued Job ID: ${job.id}`);
+        // 🟢 THE HOT RELOAD FIX: Save the configuration to Redis instead of BullMQ!
+        await redisConnection.set(`workflow_config:${workflowId}`, JSON.stringify(workflowConfig));
+
+        // --- HANDLE SCHEDULED JOBS (TIMER) ---
+        if (isTimer) {
+            const { scheduleType, intervalMinutes, cronExpression } = workflowConfig.trigger;
+            let repeatOpts: any = {};
+
+            if (scheduleType === 'cron' && cronExpression) {
+                // E.g., '0 12 * * *' (Run every day at noon)
+                repeatOpts = { pattern: cronExpression };
+            } else if (scheduleType === 'interval' && intervalMinutes) {
+                // BullMQ expects milliseconds
+                const ms = parseInt(intervalMinutes) * 60 * 1000;
+                repeatOpts = { every: ms };
+            } else {
+                return res.status(400).send({ error: "Invalid timer configuration." });
+            }
+
+            // --- ♻️ OVERWRITE EXISTING SCHEDULE ---
+            // Fetch all active schedules from Redis
+            const repeatableJobs = await workflowQueue.getRepeatableJobs();
+            
+            // Look for an existing schedule matching this workflow's ID
+            const existingJob = repeatableJobs.find(job => job.id === workflowId);
+            
+            if (existingJob) {
+                // Remove the old schedule tick
+                await workflowQueue.removeRepeatableByKey(existingJob.key);
+                console.log(`♻️  Updated existing schedule for: ${workflowConfig.workflowName || 'default'}. Changes applied!`);
+            } else {
+                console.log(`⏰ Scheduling new workflow: ${workflowId} with opts:`, repeatOpts);
+            }
+
+            await workflowQueue.add(
+                'execute-workflow', 
+                {
+                    // Notice we NO LONGER send config here! Just the ID and context.
+                    context: manualContext,
+                    requestedAt: new Date().toISOString(),
+                    workflowId: workflowId 
+                }, 
+                { 
+                    repeat: repeatOpts,
+                    jobId: workflowId // Keeps the job ID consistent across repeats
+                }
+            );
+
+            return res.status(202).send({ 
+                success: true, 
+                message: "Workflow scheduled successfully!",
+                jobId: workflowId 
+            });
+        }
+
+        // --- STANDARD IMMEDIATE JOBS (Webhook, Manual Deploy, etc.) ---
+        const job = await workflowQueue.add(
+            'execute-workflow', 
+            {
+                // Notice we NO LONGER send config here! Just the ID and context.
+                context: manualContext,
+                requestedAt: new Date().toISOString(),
+                workflowId: workflowId 
+            },
+            {
+                jobId: workflowId // Force the base Job ID to match
+            }
+        );
+
+        console.log(`   ✅ Queued Immediate Job ID: ${job.id}`);
         
         res.status(202).send({ 
             success: true, 
@@ -98,6 +165,25 @@ app.post("/trigger-workflow", async (req, res) => {
     }
 });
 
+// --- NEW API ROUTE: HOT RELOAD ---
+app.put('/hot-reload', async (req, res) => {
+    const { workflowId, config } = req.body;
+    try {
+        if (!workflowId || !config) {
+            return res.status(400).json({ success: false, error: "Missing workflowId or config" });
+        }
+        
+        // Silently overwrite the active configuration in Redis
+        await redisConnection.set(`workflow_config:${workflowId}`, JSON.stringify(config));
+        
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error("❌ Hot Reload Error:", error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// --- API ROUTE: TEST INDIVIDUAL NODE ---
 app.post('/test-node', async (req, res) => {
     try {
         const { type, config } = req.body;
@@ -116,6 +202,47 @@ app.post('/test-node', async (req, res) => {
         res.json({ success: true, data: result });
     } catch (error: any) {
         console.error(`Test Node Error (${req.body.type}):`, error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// --- GET ACTIVE SCHEDULES ---
+app.get('/schedules', async (req, res) => {
+    try {
+        // BullMQ built-in method to get all repeatable jobs
+        const jobs = await workflowQueue.getRepeatableJobs();
+        
+        // Format the output for the frontend
+        const formattedJobs = jobs.map(job => ({
+            key: job.key,
+            name: job.name,
+            id: job.id, // This is the workflowId we passed earlier
+            pattern: job.pattern || `Every ${job.every / 60000} mins`,
+            nextRun: new Date(job.next).toLocaleString()
+        }));
+
+        res.json({ success: true, jobs: formattedJobs });
+    } catch (error: any) {
+        console.error("Error fetching schedules:", error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// --- DELETE/STOP A SCHEDULE ---
+app.delete('/schedules/:key', async (req, res) => {
+    try {
+        const { key } = req.params;
+        
+        // BullMQ requires the exact 'key' (a combination of id, cron string, etc.) to remove it
+        // We decode it because it's passed as a URL parameter
+        const decodedKey = decodeURIComponent(key);
+        
+        await workflowQueue.removeRepeatableByKey(decodedKey);
+        
+        console.log(`🛑 Stopped schedule: ${decodedKey}`);
+        res.json({ success: true, message: "Schedule stopped successfully." });
+    } catch (error: any) {
+        console.error("Error stopping schedule:", error);
         res.status(500).json({ success: false, error: error.message });
     }
 });

@@ -1,12 +1,13 @@
 import React, { memo, useMemo } from "react";
-import { Handle, Position, NodeProps } from "reactflow";
-import { AlertCircle, Play, GitMerge } from "lucide-react";
+import { Handle, Position, NodeProps, useReactFlow } from "reactflow";
+import { AlertCircle, Play, GitMerge, Loader2 } from "lucide-react";
 import { NODE_TYPES, CATEGORY_COLORS } from "@/lib/nodeConfig";
 import { useFlowContext } from "./FlowContext";
-import NodeExecutionStatus from "../NodeExecutionStatus"; // <-- Import the new Status Component
+import NodeExecutionStatus from "../NodeExecutionStatus";
 
 const NexusNode = ({ id, data, selected }: NodeProps) => {
   const { isCompact } = useFlowContext();
+  const { setNodes } = useReactFlow();
 
   const type = data.type || "webhook";
   const config = NODE_TYPES[type] || NODE_TYPES["math_operation"];
@@ -23,16 +24,75 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
     });
   }, [config.inputs, data.config]);
 
-  const onTestClick = (e: React.MouseEvent) => {
+  const execStatus = data.executionData?.status;
+
+  // --- INDIVIDUAL NODE TESTING LOGIC ---
+  const onTestClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    console.log(`🚀 Testing Node [${data.label}]...`, data.config);
+    if (execStatus === "running") return; // Prevent double clicks
+
+    // 1. Instantly show the "Running" spinner popover
+    setNodes((nds) =>
+      nds.map((n) =>
+        n.id === id
+          ? { ...n, data: { ...n.data, executionData: { status: "running" } } }
+          : n,
+      ),
+    );
+
+    try {
+      // 2. Call the backend endpoint
+      const response = await fetch("http://localhost:3001/test-node", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: data.type,
+          config: data.config,
+        }),
+      });
+
+      const result = await response.json();
+
+      // 3. Update the popover with Success or Failure
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === id
+            ? {
+                ...n,
+                data: {
+                  ...n.data,
+                  executionData: {
+                    status: result.success ? "success" : "failed",
+                    result: result.success ? result.data : undefined,
+                    error: result.success ? undefined : result.error,
+                  },
+                },
+              }
+            : n,
+        ),
+      );
+    } catch (error: any) {
+      // Handle network errors
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === id
+            ? {
+                ...n,
+                data: {
+                  ...n.data,
+                  executionData: { status: "failed", error: error.message },
+                },
+              }
+            : n,
+        ),
+      );
+    }
   };
 
   const handleClasses =
     "w-2 h-2 rounded-full border border-white transition-all duration-200";
 
-  // --- NEW: Execution Status Styles ---
-  const execStatus = data.executionData?.status;
+  // --- DYNAMIC EXECUTION STYLES ---
   let execStyles = "";
   if (execStatus === "running") {
     execStyles =
@@ -43,7 +103,7 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
     execStyles = "!ring-4 !ring-red-500/30 !border-red-500 z-20";
   }
 
-  // --- SPECIAL RENDER: MERGE NODE (Always Circle) ---
+  // --- SPECIAL RENDER: MERGE NODE ---
   if (type === "merge") {
     return (
       <div
@@ -72,9 +132,6 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
           className="!w-3 !h-3 !border-2 !border-white !bg-indigo-400 hover:scale-125 transition-transform absolute"
           style={{ top: "50%", transform: "translate(50%, -50%)", right: -9 }}
         />
-        <div className="absolute -bottom-6 w-32 text-center left-1/2 -translate-x-1/2 text-[9px] font-bold text-slate-400 uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">
-          Merge
-        </div>
       </div>
     );
   }
@@ -83,7 +140,6 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
   if (isCompact) {
     return (
       <div className="relative group flex flex-col items-center">
-        {/* Render the Execution Popover above the compact node */}
         <NodeExecutionStatus nodeId={id} executionData={data.executionData} />
 
         <div
@@ -100,33 +156,38 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
             <Icon size={20} strokeWidth={1.5} />
           </div>
 
-          {/* Validation Error Badge */}
           {!isValid && (
             <div className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 border-2 border-white shadow-sm">
               <AlertCircle size={8} />
             </div>
           )}
 
-          {/* Test Button (Hover) */}
-          {isValid && config.category !== "trigger" && (
-            <button
-              onClick={onTestClick}
-              className="absolute -top-2 -right-2 bg-slate-800 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100 hover:bg-indigo-600 shadow-lg z-30"
-              title="Test Node"
-            >
-              <Play size={8} fill="currentColor" />
-            </button>
-          )}
+          {/* Hide test button for logic nodes (like condition/merge) */}
+          {isValid &&
+            config.category !== "trigger" &&
+            config.category !== "logic" && (
+              <button
+                onClick={onTestClick}
+                disabled={execStatus === "running"}
+                className="absolute -top-2 -right-2 bg-slate-800 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100 hover:bg-indigo-600 shadow-lg z-30 disabled:bg-amber-500"
+                title="Test Node"
+              >
+                {execStatus === "running" ? (
+                  <Loader2 size={8} className="animate-spin" />
+                ) : (
+                  <Play size={8} fill="currentColor" />
+                )}
+              </button>
+            )}
         </div>
 
-        {/* Floating Label */}
         <div
           className={`absolute top-14 text-[10px] font-medium text-center whitespace-nowrap px-2 py-0.5 rounded-md transition-all duration-200 ${selected ? "text-indigo-600 bg-indigo-50" : "text-slate-400 group-hover:text-slate-600 group-hover:bg-white/50"}`}
         >
           {data.config?.description || config.label}
         </div>
 
-        {/* Compact Handles */}
+        {/* Handles */}
         {config.category !== "trigger" && (
           <Handle
             type="target"
@@ -188,7 +249,6 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
         ${execStyles}
       `}
     >
-      {/* Render Execution Popover */}
       <NodeExecutionStatus nodeId={id} executionData={data.executionData} />
 
       {!isValid && (
@@ -212,15 +272,22 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
           </span>
         </div>
         <div className="flex items-center gap-2">
-          {isValid && config.category !== "trigger" && (
-            <button
-              className="p-1 rounded hover:bg-white/50 text-slate-500 hover:text-indigo-600 transition-colors"
-              title="Test this node"
-              onClick={onTestClick}
-            >
-              <Play size={10} fill="currentColor" />
-            </button>
-          )}
+          {isValid &&
+            config.category !== "trigger" &&
+            config.category !== "logic" && (
+              <button
+                className={`p-1 rounded transition-colors ${execStatus === "running" ? "text-amber-500" : "text-slate-500 hover:text-indigo-600 hover:bg-white/50"}`}
+                title="Test this node"
+                onClick={onTestClick}
+                disabled={execStatus === "running"}
+              >
+                {execStatus === "running" ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <Play size={10} fill="currentColor" />
+                )}
+              </button>
+            )}
           {isValid ? (
             <div className="w-2 h-2 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.6)]" />
           ) : (

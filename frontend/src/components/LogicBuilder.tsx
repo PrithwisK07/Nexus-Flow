@@ -1,12 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import {
-  Plus,
-  Trash2,
-  GitMerge,
-  Braces,
-  ChevronRight,
-  Activity,
-} from "lucide-react";
+import { Plus, Trash2, GitMerge, Braces, Activity } from "lucide-react";
 
 // --- TYPES ---
 type Operator = ">" | "<" | "==" | "!=" | "contains" | "is_empty";
@@ -25,7 +18,6 @@ export default function LogicBuilder({
   onChange,
   variables,
 }: LogicBuilderProps) {
-  // Initialization safety
   if (!value || !value.rules) {
     value = { combinator: "AND", rules: [] };
   }
@@ -68,7 +60,6 @@ export default function LogicBuilder({
 
   return (
     <div className="flex flex-col gap-2 p-3 bg-slate-50 border border-slate-200 rounded-lg">
-      {/* Header */}
       <div className="flex items-center gap-2">
         <button
           onClick={toggleCombinator}
@@ -82,12 +73,10 @@ export default function LogicBuilder({
         </button>
       </div>
 
-      {/* Rules List */}
       <div className="flex flex-col gap-2 pl-3 border-l-2 border-slate-200/50 mt-1">
         {value.rules.map((rule, idx) => (
           <div key={idx} className="relative group">
             {"combinator" in rule ? (
-              // Nested Group
               <div className="relative">
                 <LogicBuilder
                   value={rule as RuleGroup}
@@ -102,19 +91,16 @@ export default function LogicBuilder({
                 </button>
               </div>
             ) : (
-              // Single Rule Row
               <div className="flex items-center gap-2 bg-white p-2 border border-slate-200 rounded shadow-sm z-10 relative">
-                {/* Variable A (With Picker) */}
                 <VariableInput
                   value={(rule as LogicRule).valueA}
-                  onChange={(v) =>
+                  onChange={(v: string) =>
                     updateIndex(idx, { ...rule, valueA: v } as LogicRule)
                   }
                   variables={variables}
                   placeholder="Var A"
                 />
 
-                {/* Operator */}
                 <select
                   className="text-xs bg-slate-50 border-none rounded font-bold text-slate-600 focus:ring-0 cursor-pointer w-16"
                   value={(rule as LogicRule).operator}
@@ -133,17 +119,15 @@ export default function LogicBuilder({
                   <option value="is_empty">empty</option>
                 </select>
 
-                {/* Value B (With Picker) */}
                 <VariableInput
                   value={(rule as LogicRule).valueB}
-                  onChange={(v) =>
+                  onChange={(v: string) =>
                     updateIndex(idx, { ...rule, valueB: v } as LogicRule)
                   }
                   variables={variables}
                   placeholder="Value"
                 />
 
-                {/* Remove */}
                 <button
                   onClick={() => removeIndex(idx)}
                   className="text-slate-300 hover:text-red-500"
@@ -156,7 +140,6 @@ export default function LogicBuilder({
         ))}
       </div>
 
-      {/* Footer Buttons */}
       <div className="flex gap-2 mt-1">
         <button
           onClick={addRule}
@@ -175,58 +158,101 @@ export default function LogicBuilder({
   );
 }
 
-// --- SUB-COMPONENT: SMART INPUT WITH PICKER ---
+// --- SUB-COMPONENT: SMART INPUT WITH PICKER & HOTKEYS ---
 const VariableInput = ({ value, onChange, variables, placeholder }: any) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [cursorPos, setCursorPos] = useState<number | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
         wrapperRef.current &&
         !wrapperRef.current.contains(event.target as Node)
-      ) {
+      )
         setIsOpen(false);
-      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const insertVar = (varName: string, nodeId?: string) => {
-    // Format: {{node_123.TX_HASH}} or {{Column_A}}
-    const formatted = nodeId ? `{{${nodeId}.${varName}}}` : `{{${varName}}}`;
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.ctrlKey && e.code === "Space") {
+      e.preventDefault();
+      setCursorPos(inputRef.current?.selectionStart || null);
+      setIsOpen(true);
+    }
+    if (e.code === "Escape" && isOpen) setIsOpen(false);
+  };
 
-    // Append to existing text
-    onChange(`${value}${formatted}`);
+  const updateCursor = () =>
+    setCursorPos(inputRef.current?.selectionStart || null);
+
+  const insertVar = (varName: string, nodeId?: string) => {
+    const formatted = nodeId ? `{{${nodeId}.${varName}}}` : `{{${varName}}}`;
+    const safeValue = value || "";
+
+    if (cursorPos !== null) {
+      const before = safeValue.slice(0, cursorPos);
+      const after = safeValue.slice(cursorPos);
+      onChange(`${before}${formatted}${after}`);
+
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+          const newPos = cursorPos + formatted.length;
+          inputRef.current.setSelectionRange(newPos, newPos);
+        }
+      }, 0);
+    } else {
+      onChange(`${safeValue}${formatted}`);
+    }
     setIsOpen(false);
   };
 
   return (
-    <div ref={wrapperRef} className="relative flex-1 min-w-[100px]">
+    <div ref={wrapperRef} className="relative flex-1 min-w-[100px] group/input">
       <input
+        ref={inputRef}
         type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
+        value={value || ""}
+        onChange={(e) => {
+          onChange(e.target.value);
+          updateCursor();
+        }}
+        onKeyDown={handleKeyDown}
+        onClick={updateCursor}
+        onKeyUp={updateCursor}
         placeholder={placeholder}
-        className="w-full text-xs p-1.5 pr-6 bg-transparent border-b border-dashed border-slate-300 focus:border-indigo-500 focus:outline-none font-mono text-slate-700"
+        className="w-full text-xs p-1.5 pr-6 bg-transparent border-b border-dashed border-slate-300 focus:border-indigo-500 focus:outline-none font-mono text-slate-700 transition-colors"
       />
 
-      {/* The { } Button */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="absolute right-0 top-1 p-0.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded"
-        title="Insert Variable"
+        onClick={(e) => {
+          e.preventDefault();
+          setCursorPos(inputRef.current?.selectionStart || null);
+          setIsOpen(!isOpen);
+        }}
+        className={`absolute right-0 top-1 p-0.5 rounded transition-colors ${isOpen ? "text-indigo-600 bg-indigo-50" : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"}`}
+        title="Insert Variable (Ctrl + Space)"
       >
         <Braces size={12} />
       </button>
 
-      {/* The Dropdown Menu */}
+      {!isOpen && !value && (
+        <div className="absolute right-6 top-1.5 text-[9px] text-slate-300 pointer-events-none opacity-0 group-hover/input:opacity-100 transition-opacity font-sans">
+          Ctrl+Space
+        </div>
+      )}
+
       {isOpen && (
         <div className="absolute left-0 top-full mt-1 w-64 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-xl z-[9999] animate-in fade-in zoom-in-95 duration-100">
-          <div className="bg-slate-50 px-2 py-1.5 border-b border-gray-100 text-[10px] font-bold text-slate-500 uppercase">
-            Select Variable
+          <div className="bg-slate-50 px-2 py-1.5 border-b border-gray-100 text-[10px] font-bold text-slate-500 uppercase flex justify-between items-center">
+            <span>Select Variable</span>
+            <span className="text-[8px] font-normal text-slate-400 normal-case bg-slate-200/50 px-1 rounded">
+              esc to close
+            </span>
           </div>
           {variables.length === 0 ? (
             <div className="p-3 text-center text-[10px] text-slate-400">
@@ -236,7 +262,10 @@ const VariableInput = ({ value, onChange, variables, placeholder }: any) => {
             variables.map((v: any, idx: number) => (
               <button
                 key={idx}
-                onClick={() => insertVar(v.name, v.nodeId)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  insertVar(v.name, v.nodeId);
+                }}
                 className="w-full text-left px-3 py-2 hover:bg-indigo-50 flex items-center gap-2 border-b border-gray-50 last:border-0 group"
               >
                 <div

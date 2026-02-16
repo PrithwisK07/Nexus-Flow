@@ -24,6 +24,15 @@ export default function PropertiesPanel({
   const currentData = selectedNode.data.config || {};
 
   const [activeField, setActiveField] = useState<string | null>(null);
+
+  // NEW: State and Refs for precise cursor tracking on main panel inputs
+  const [cursorPos, setCursorPos] = useState<{
+    field: string;
+    pos: number;
+  } | null>(null);
+  const inputRefs = useRef<
+    Record<string, HTMLInputElement | HTMLTextAreaElement>
+  >({});
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,23 +52,56 @@ export default function PropertiesPanel({
     updateData(selectedNode.id, { [field]: value });
   };
 
+  // NEW: Hotkey Listener for Text/Textarea
+  const handleKeyDown = (e: React.KeyboardEvent, fieldName: string) => {
+    if (e.ctrlKey && e.code === "Space") {
+      e.preventDefault();
+      const el = inputRefs.current[fieldName];
+      setCursorPos({ field: fieldName, pos: el?.selectionStart || 0 });
+      setActiveField(fieldName);
+    }
+    if (e.code === "Escape" && activeField === fieldName) {
+      setActiveField(null);
+    }
+  };
+
+  const updateCursor = (fieldName: string) => {
+    const el = inputRefs.current[fieldName];
+    if (el) setCursorPos({ field: fieldName, pos: el.selectionStart || 0 });
+  };
+
   /**
-   * NEW: Handles Scoped Variable Insertion
-   * If nodeId is provided, it creates {{nodeId.varName}} to prevent collisions.
+   * UPDATED: Handles Scoped Variable Insertion at specific cursor locations
    */
   const insertVariable = (field: string, varName: string, nodeId?: string) => {
     const currentValue = currentData[field] || "";
-    const formattedVar = nodeId ? `${nodeId}.${varName}` : varName;
-    const newValue = `${currentValue}{{${formattedVar}}}`;
-    handleChange(field, newValue);
+    const formattedVar = nodeId ? `{{${nodeId}.${varName}}}` : `{{${varName}}}`;
+
+    if (cursorPos && cursorPos.field === field) {
+      const before = currentValue.slice(0, cursorPos.pos);
+      const after = currentValue.slice(cursorPos.pos);
+      handleChange(field, `${before}${formattedVar}${after}`);
+
+      // Re-focus and shift cursor
+      setTimeout(() => {
+        const el = inputRefs.current[field];
+        if (el) {
+          el.focus();
+          const newPos = cursorPos.pos + formattedVar.length;
+          el.setSelectionRange(newPos, newPos);
+        }
+      }, 0);
+    } else {
+      handleChange(field, `${currentValue}${formattedVar}`);
+    }
+
     setActiveField(null);
+    setCursorPos(null);
   };
 
   // --- SMART VARIABLE DISCOVERY ---
   const getAvailableVariables = () => {
     const vars: any[] = [];
-
-    // 1. ADD SHEET VARIABLES (Only if Sheet Trigger exists on canvas)
     const hasSheetTrigger = nodes.some((n: any) => n.data.type === "sheets");
 
     if (hasSheetTrigger) {
@@ -82,26 +124,19 @@ export default function PropertiesPanel({
       });
     }
 
-    // 2. SCAN ALL OTHER NODES FOR OUTPUTS (Scoped by Node ID)
     nodes.forEach((node: any) => {
-      // Don't suggest outputs from the node currently being edited
       if (node.id === selectedNode.id) return;
-
       const nodeConfig = NODE_TYPES[node.data.type];
-
       if (nodeConfig?.outputs) {
         nodeConfig.outputs.forEach((out: any) => {
           let varName = out.name;
-
-          // Resolve dynamic names (like JSON Extractor alias)
           if (out.name === "dynamic" && out.sourceField) {
             varName = node.data.config?.[out.sourceField];
           }
-
           if (varName) {
             vars.push({
               name: varName,
-              nodeId: node.id, // CRITICAL: Identify which node this belongs to
+              nodeId: node.id,
               desc: `${out.desc}`,
               sourceLabel: node.data.label || nodeConfig.label,
               icon: "node",
@@ -151,20 +186,25 @@ export default function PropertiesPanel({
           {config.inputs &&
             config.inputs.map((input: any) => (
               <div key={input.name} className="space-y-1.5 relative group">
-                <div className="flex justify-between">
+                <div className="flex justify-between items-end">
                   <label className="text-sm font-bold text-slate-700">
                     {input.label}
                   </label>
-                  {input.required === false && (
-                    <span className="text-[10px] text-slate-400 font-medium px-1.5 py-0.5 bg-slate-100 rounded">
-                      Optional
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {!input.readOnly &&
+                      (input.type === "text" || input.type === "textarea") && (
+                        <span className="text-[9px] text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity font-sans pointer-events-none">
+                          Ctrl+Space
+                        </span>
+                      )}
+                    {input.required === false && (
+                      <span className="text-[10px] text-slate-400 font-medium px-1.5 py-0.5 bg-slate-100 rounded">
+                        Optional
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                {/* --- INPUT TYPE SWITCHER --- */}
-
-                {/* 1. LOGIC BUILDER (New Condition Editor) */}
                 {input.type === "logic-builder" ? (
                   <LogicBuilder
                     value={
@@ -176,8 +216,7 @@ export default function PropertiesPanel({
                     onChange={(val: any) => handleChange(input.name, val)}
                     variables={variables}
                   />
-                ) : /* 2. SELECT DROPDOWN */
-                input.type === "select" ? (
+                ) : input.type === "select" ? (
                   <select
                     className="w-full p-2.5 bg-white border border-gray-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm"
                     value={currentData[input.name] || ""}
@@ -193,56 +232,75 @@ export default function PropertiesPanel({
                     ))}
                   </select>
                 ) : (
-                  /* 3. STANDARD TEXT/TEXTAREA INPUTS */
-                  <div className="relative">
+                  <div className="relative group/input">
                     {input.type === "textarea" ? (
                       <textarea
+                        ref={(el) => {
+                          if (el) inputRefs.current[input.name] = el;
+                        }}
                         className="w-full p-2.5 bg-white border border-gray-300 rounded-lg text-sm text-slate-900 h-24 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all resize-none shadow-sm font-mono"
                         placeholder={input.placeholder || ""}
                         value={currentData[input.name] || ""}
-                        onChange={(e) =>
-                          handleChange(input.name, e.target.value)
-                        }
+                        onChange={(e) => {
+                          handleChange(input.name, e.target.value);
+                          updateCursor(input.name);
+                        }}
+                        onKeyDown={(e) => handleKeyDown(e, input.name)}
+                        onClick={() => updateCursor(input.name)}
+                        onKeyUp={() => updateCursor(input.name)}
                       />
                     ) : (
                       <input
+                        ref={(el) => {
+                          if (el) inputRefs.current[input.name] = el;
+                        }}
                         type={input.type}
                         className="w-full p-2.5 pr-8 bg-white border border-gray-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm font-mono"
                         placeholder={input.placeholder || ""}
                         value={currentData[input.name] || ""}
                         readOnly={input.readOnly}
-                        onChange={(e) =>
-                          handleChange(input.name, e.target.value)
-                        }
+                        onChange={(e) => {
+                          handleChange(input.name, e.target.value);
+                          updateCursor(input.name);
+                        }}
+                        onKeyDown={(e) => handleKeyDown(e, input.name)}
+                        onClick={() => updateCursor(input.name)}
+                        onKeyUp={() => updateCursor(input.name)}
                       />
                     )}
 
-                    {/* Variable Picker Trigger */}
                     {!input.readOnly &&
                       (input.type === "text" || input.type === "textarea") && (
                         <button
-                          onClick={() =>
+                          onClick={(e) => {
+                            e.preventDefault();
+                            updateCursor(input.name);
                             setActiveField(
                               activeField === input.name ? null : input.name,
-                            )
-                          }
-                          className="absolute right-2 top-2 p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                            );
+                          }}
+                          className={`absolute right-2 top-2 p-1 rounded transition-colors ${activeField === input.name ? "text-indigo-600 bg-indigo-50" : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"}`}
+                          title="Insert Variable (Ctrl + Space)"
                         >
                           <Braces size={14} />
                         </button>
                       )}
 
-                    {/* Variable Dropdown */}
                     {activeField === input.name && (
                       <div
                         ref={dropdownRef}
                         className="absolute right-0 top-full mt-1 w-80 bg-white border border-gray-200 rounded-lg shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100"
                       >
-                        <div className="bg-slate-50 px-3 py-2 border-b border-gray-200 text-[10px] font-bold text-slate-500 uppercase flex justify-between">
+                        <div className="bg-slate-50 px-3 py-2 border-b border-gray-200 text-[10px] font-bold text-slate-500 uppercase flex justify-between items-center">
                           <span>Insert Data Variable</span>
-                          <span className="text-indigo-500">
-                            {variables.length} available
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[8px] font-normal text-slate-400 normal-case bg-slate-200/50 px-1 rounded">
+                              esc to close
+                            </span>
+                            <span className="text-indigo-500">
+                              {variables.length} available
+                            </span>
+                          </div>
                         </div>
 
                         <div className="max-h-64 overflow-y-auto">
@@ -256,9 +314,10 @@ export default function PropertiesPanel({
                             variables.map((v, idx) => (
                               <button
                                 key={`${v.name}-${idx}`}
-                                onClick={() =>
-                                  insertVariable(input.name, v.name, v.nodeId)
-                                }
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  insertVariable(input.name, v.name, v.nodeId);
+                                }}
                                 className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-3 transition-colors border-b border-gray-50 last:border-0 group/item"
                               >
                                 <div
@@ -312,7 +371,6 @@ export default function PropertiesPanel({
         </div>
       </div>
 
-      {/* Footer hint */}
       <div className="p-4 bg-slate-50 border-t border-gray-100">
         <p className="text-[10px] text-slate-400 leading-relaxed text-center">
           Variables used as{" "}

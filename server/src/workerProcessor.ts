@@ -4,6 +4,7 @@ import { resolveVariable, type ExecutionContext } from './engine/variableResolve
 import { NODE_REGISTRY } from './engine/nodes/index.js';
 import { evaluateRuleGroup, type RuleGroup, type LogicRule } from './engine/logic.js';
 import { redisPublisher } from './config/redisPublisher.js';
+import { redisConnection } from './config/redis.js'; // <--- NEW: Import Redis connection for Hot Reloading
 
 // --- HELPER: REAL-TIME REPORTER ---
 // Sends status updates to Redis -> API -> Frontend (Socket)
@@ -160,10 +161,28 @@ const executeChain = async (
 export default async function workerProcessor(job: Job) {
     console.log(`\n👷 [PID:${process.pid}] Processing Job ${job.id}`);
     
-    const { config, context: initialContext } = job.data;
+    // FIX: Extract workflowId to ensure we match the frontend subscription room exactly
+    const { context: initialContext, workflowId } = job.data;
+    const eventRoomId = workflowId || job.id; 
+
     let itemsToProcess: any[] = [];
 
     try {
+        // 🟢 HOT RELOAD FIX: Fetch the absolute latest configuration from Redis!
+        const configString = await redisConnection.get(`workflow_config:${workflowId}`);
+        let config;
+        
+        if (configString) {
+            config = JSON.parse(configString);
+        } else if (job.data.config) {
+            // Safety fallback for immediate runs or legacy jobs
+            console.warn(`   ⚠️ Config for ${workflowId} not found in Redis. Falling back to static payload.`);
+            config = job.data.config;
+        } else {
+            throw new Error(`Configuration for ${workflowId} not found in Redis. It may have been deleted.`);
+        }
+
+        // --- MODE SETUP ---
         if (config.trigger.type === "sheets") {
             const sheetId = config.spreadsheetId;
             if (!sheetId) throw new Error("No Spreadsheet ID");
@@ -176,7 +195,13 @@ export default async function workerProcessor(job: Job) {
                 .filter(item => item.row[triggerCol] === triggerVal);
                 
             console.log(`   📊 [PID:${process.pid}] Sheet Mode: Processing ${itemsToProcess.length} rows.`);
+        } else if (config.trigger.type === "timer") {
+            // TIMER MODE (CRON/INTERVAL)
+            itemsToProcess = [{ row: [], realIndex: -1, initialContext }];
+            const triggerTime = new Date(job.timestamp).toLocaleString();
+            console.log(`   ⏰ [PID:${process.pid}] Timer Mode: Executing scheduled run for ${triggerTime}.`);
         } else {
+            // WEBHOOK / MANUAL MODE
             itemsToProcess = [{ row: [], realIndex: -1, initialContext }];
             console.log(`   ⚡ [PID:${process.pid}] Single Mode: Executing 1 run.`);
         }
@@ -195,15 +220,18 @@ export default async function workerProcessor(job: Job) {
                 context["ROW_INDEX"] = item.realIndex;
             }
 
-            // Start the chain execution, passing the Job ID for reporting
-            await executeChain(config.actions, context, config.spreadsheetId, job.id);
+            // FIX: Emit reset signal so frontend canvas clears previous run states
+            await emitEvent(eventRoomId, 'workflow_run_started', { timestamp: Date.now() });
+
+            // Start the chain execution, passing the exact eventRoomId for reporting
+            await executeChain(config.actions, context, config.spreadsheetId, eventRoomId);
         }
 
-        console.log(`🏁 [PID:${process.pid}] Job ${job.id} Completed.`);
+        console.log(`🏁 [PID:${process.pid}] Job ${eventRoomId} Completed.`);
         return { status: "success", processed: itemsToProcess.length };
 
     } catch (error: any) {
-        console.error(`💥 [PID:${process.pid}] Job ${job.id} Failed:`, error.message);
+        console.error(`💥 [PID:${process.pid}] Job ${eventRoomId} Failed:`, error.message);
         throw error;
     }
 }

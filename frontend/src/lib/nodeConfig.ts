@@ -1,7 +1,7 @@
 import { 
   Zap, ArrowRightLeft, Database, Calculator, MessageSquare, Mail, 
   FileSpreadsheet, Layers, Search, Globe, Rss, Fingerprint, 
-  Variable, FileJson, Calendar, Flame, Send, GitMerge, GitFork
+  Variable, FileJson, Calendar, Flame, Send, GitMerge, GitFork, Clock
 } from 'lucide-react';
 
 export const CATEGORY_COLORS: Record<string, any> = {
@@ -28,6 +28,14 @@ export const NODE_TYPES: Record<string, any> = {
     ]
     // Note: Sheet variables are handled dynamically via Global Settings Mapping
   },
+  'timer': {
+    label: 'Schedule / Cron', category: 'trigger', icon: Clock,
+    inputs: [
+      { name: 'scheduleType', label: 'Schedule Type', type: 'select', options: ['interval', 'cron'] },
+      { name: 'intervalMinutes', label: 'Every X Minutes', type: 'number', placeholder: '60', required: false },
+      { name: 'cronExpression', label: 'Cron Expression', type: 'text', placeholder: '0 12 * * *', required: false }
+    ]
+  },
 
   // --- WEB3 ---
   'transfer': { 
@@ -51,15 +59,18 @@ export const NODE_TYPES: Record<string, any> = {
     ],
     outputs: [{ name: 'TX_HASH', desc: 'Swap Transaction Hash' }]
   },
-  'aave_supply': { 
-    label: 'Aave Supply', category: 'web3', icon: Layers,
-    inputs: [
-      { name: 'asset', label: 'Asset Address', type: 'text', placeholder: '0x...' },
-      { name: 'amount', label: 'Amount', type: 'text' },
-      { name: 'onBehalfOf', label: 'On Behalf Of', type: 'text', placeholder: '0x...' },
-    ],
-    outputs: [{ name: 'TX_HASH', desc: 'Supply Transaction Hash' }]
-  },
+
+  // Issues with Aave v3 protocols:
+  // 'aave_supply': { 
+  //   label: 'Aave Supply', category: 'web3', icon: Layers,
+  //   inputs: [
+  //     { name: 'asset', label: 'Asset Address', type: 'text', placeholder: '0x...' },
+  //     { name: 'amount', label: 'Amount', type: 'text' },
+  //     { name: 'onBehalfOf', label: 'On Behalf Of', type: 'text', placeholder: '0x...' },
+  //     { name: 'decimals', label: 'Decimals (Opt)', type: 'number', placeholder: '18', required: false },
+  //   ],
+  //   outputs: [{ name: 'TX_HASH', desc: 'Supply Transaction Hash' }]
+  // },
   'read_contract': { 
     label: 'Read Contract', category: 'web3', icon: Search,
     inputs: [
@@ -109,7 +120,13 @@ export const NODE_TYPES: Record<string, any> = {
   'read_rss': { 
     label: 'Read RSS Feed', category: 'data', icon: Rss,
     inputs: [{ name: 'url', label: 'RSS URL', type: 'text' }],
-    outputs: [{ name: 'RSS_ITEM', desc: 'Latest RSS Item' }]
+    outputs: [
+      { name: 'RSS_TITLE', desc: 'Post Title' },
+      { name: 'RSS_LINK', desc: 'Post URL' },
+      { name: 'RSS_CONTENT', desc: 'Full HTML Content' },
+      { name: 'RSS_SNIPPET', desc: 'Plain Text Snippet' },
+      { name: 'RSS_PUBDATE', desc: 'Publish Date' }
+    ]
   },
 
   // --- LOGIC ---
@@ -210,5 +227,16 @@ export const NODE_TYPES: Record<string, any> = {
       { name: '_info', label: 'Behavior', type: 'text', placeholder: 'Waits for all branches', readOnly: true }
     ],
     outputs: [] // No specific outputs, it passes context through
+  },
+  'http_scraper': { 
+    label: 'Web Scraper', category: 'data', icon: Globe,
+    inputs: [
+      { name: 'url', label: 'Page URL', type: 'text', placeholder: 'https://...' },
+      { name: 'selector', label: 'CSS Selector (Opt)', type: 'text', placeholder: 'article, .main-content', required: false },
+    ],
+    outputs: [
+      { name: 'SCRAPED_TITLE', desc: 'Page Title' },
+      { name: 'SCRAPED_CONTENT', desc: 'Cleaned Text Content' }
+    ]
   },
 };

@@ -35,6 +35,7 @@ import {
   Settings,
   LayoutGrid,
   LayoutList,
+  Clock, // <-- IMPORT CLOCK ICON
 } from "lucide-react";
 
 import NexusNode from "@/components/flow/NexusNode";
@@ -42,6 +43,7 @@ import PropertiesPanel from "@/components/PropertiesPanel";
 import ContextMenu from "@/components/flow/ContextMenu";
 import LiveLogs from "@/components/LiveLogs";
 import SettingsModal from "@/components/SettingsModal";
+import ActiveSchedulesModal from "@/components/ActiveSchedulesModal"; // <-- IMPORT NEW MODAL
 import { useUndoRedo } from "@/hooks/useUndoRedo";
 import { useDeployment } from "@/hooks/useDeployment";
 import { NODE_TYPES, CATEGORY_COLORS } from "@/lib/nodeConfig";
@@ -103,6 +105,7 @@ function NexusCanvas() {
   const [searchTerm, setSearchTerm] = useState("");
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSchedulesOpen, setIsSchedulesOpen] = useState(false); // <-- NEW STATE FOR SCHEDULES MODAL
   const [globalSettings, setGlobalSettings] = useState({
     name: "My Workflow",
     spreadsheetId: "",
@@ -111,7 +114,8 @@ function NexusCanvas() {
   // Track active execution
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
 
-  const { deploy, isDeploying } = useDeployment();
+  // --- NEW: Added hotReload to the destructured useDeployment call ---
+  const { deploy, hotReload, isDeploying } = useDeployment();
   const { takeSnapshot, undo, redo } = useUndoRedo(nodes, edges);
 
   const [defaultEdgeType, setDefaultEdgeType] = useState<any>("smoothstep");
@@ -119,12 +123,52 @@ function NexusCanvas() {
 
   const { isCompact, toggleCompact } = useContext(FlowContext);
 
+  // --- 🟢 NEW: THE AUTO-SAVE / HOT RELOAD HOOK ---
+  useEffect(() => {
+    // Only auto-save if we have actively deployed this workflow
+    if (activeJobId && hotReload) {
+      // Debounce: Wait 1 second after the user stops typing/dragging before saving
+      const timeoutId = setTimeout(() => {
+        console.log("🔄 Silently hot-reloading active workflow...");
+        hotReload(globalSettings.name, globalSettings, activeJobId);
+      }, 1000);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [nodes, edges, globalSettings, activeJobId, hotReload]); // Triggers whenever canvas changes
+
   // --- 1. REAL-TIME EXECUTION LISTENER ---
   useEffect(() => {
     socket.on("workflow_update", (event) => {
       const { type, nodeId, result, error } = event;
 
-      // A. NEW: Update Node State to trigger the Popover and Rings
+      // --- NEW: Handle the Visual Reset for new iterations ---
+      if (type === "workflow_run_started") {
+        // Reset all nodes to clear previous execution data
+        setNodes((nds) =>
+          nds.map((n) => ({
+            ...n,
+            data: { ...n.data, executionData: null },
+          })),
+        );
+
+        // Reset all edges back to default state
+        setEdges((eds) =>
+          eds.map((e) => ({
+            ...e,
+            animated: false,
+            style: {
+              ...e.style,
+              stroke: "#6366f1", // Default Indigo
+              strokeWidth: 2,
+              strokeDasharray: "0",
+            },
+          })),
+        );
+        return; // Exit early since this isn't a node-specific event
+      }
+
+      // A. EXISTING: Update Node State to trigger the Popover and Rings
       setNodes((nds) =>
         nds.map((node) => {
           if (node.id === nodeId) {
@@ -252,7 +296,7 @@ function NexusCanvas() {
       })),
     );
 
-    // B. NEW: Reset node execution states before new run
+    // B. Reset node execution states before new run
     setNodes((nds) =>
       nds.map((n) => ({
         ...n,
@@ -625,6 +669,14 @@ function NexusCanvas() {
               </button>
             </div>
 
+            {/* NEW: Schedules Manager Button */}
+            <button
+              onClick={() => setIsSchedulesOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 text-slate-600 bg-white border border-slate-200 rounded-lg text-sm font-bold hover:bg-slate-50 transition-colors"
+            >
+              <Clock size={16} className="text-indigo-500" /> Schedules
+            </button>
+
             <button
               onClick={() => setIsSettingsOpen(true)}
               className="flex items-center gap-2 px-4 py-2 text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg text-sm font-bold hover:bg-indigo-100 transition-colors"
@@ -714,6 +766,12 @@ function NexusCanvas() {
           nodes={nodes}
         />
       )}
+
+      {/* ACTIVE SCHEDULES MODAL */}
+      <ActiveSchedulesModal
+        isOpen={isSchedulesOpen}
+        onClose={() => setIsSchedulesOpen(false)}
+      />
 
       {/* SETTINGS MODAL */}
       <SettingsModal
