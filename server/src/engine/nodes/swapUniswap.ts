@@ -1,9 +1,10 @@
 import { type ExecutionContext, resolveVariable } from "../variableResolver.js";
-import { parseUnits, parseAbi, encodeFunctionData } from "viem";
+import { parseUnits, parseAbi, encodeFunctionData, createPublicClient, http, formatUnits } from "viem";
+import { sepolia } from "viem/chains"; // Make sure your chain matches your environment
 import { encodeSwap, UNISWAP_ROUTER } from "../uniswap.js";
 import { createNexusAccount } from "../smartAccount.js";
 import { Sanitize } from "../utils/inputSanitizer.js";
-import { KNOWN_TOKENS } from "../utils/tokenRegistry.js"; // <-- Import Registry
+import { KNOWN_TOKENS } from "../utils/tokenRegistry.js";
 
 type ActionInput = Record<string, any>;
 
@@ -21,12 +22,18 @@ export const swapUniswap = async (inputs: ActionInput, context: ExecutionContext
 
     const tokenOutConfig = KNOWN_TOKENS[selectedTokenOut] || {
         address: resolveVariable(inputs.customTokenOut, context),
-        decimals: 18, // Output decimals don't strictly matter for the swap router amounts, but good to have
-        isNative: false // Assume out is ERC20 unless explicitly handled
+        decimals: 18,
+        isNative: false 
     };
 
     const tokenInAddress = Sanitize.address(tokenInConfig.address);
     const tokenOutAddress = Sanitize.address(tokenOutConfig.address);
+    
+    // UNISWAP ROUTER DEMANDS WETH FOR NATIVE ETH
+    const WETH_ADDRESS = KNOWN_TOKENS["WETH"].address;
+    const routerTokenIn = tokenInConfig.isNative ? WETH_ADDRESS : tokenInAddress;
+    const routerTokenOut = tokenOutConfig.isNative ? WETH_ADDRESS : tokenOutAddress;
+
     const rawAmount = resolveVariable(inputs.amountIn, context);
     const amount = Sanitize.number(rawAmount);
     const recipient = resolveVariable(inputs.recipient, context);
@@ -34,8 +41,45 @@ export const swapUniswap = async (inputs: ActionInput, context: ExecutionContext
     console.log(`   🦄 Executing Uniswap Node: Swapping ${amount} ${selectedTokenIn} to ${selectedTokenOut}...`);
 
     const amountBigInt = parseUnits(amount.toString(), tokenInConfig.decimals);
-    const calldata = encodeSwap(tokenInAddress, tokenOutAddress, amountBigInt, recipient);
+    
+    const calldata = encodeSwap(routerTokenIn, routerTokenOut, amountBigInt, recipient);
+    
+    // Initialize the Smart Account
     const nexusClient = await createNexusAccount(0);
+    const accountAddress = nexusClient.account.address;
+
+    // --- 🟢 NEW: PRE-FLIGHT BALANCE GUARDRAIL ---
+    console.log(`      -> Verifying ${selectedTokenIn} balance for ${accountAddress}...`);
+    
+    const publicClient = createPublicClient({
+        chain: sepolia, // Update if you deploy to mainnet/base/polygon etc.
+        transport: http()
+    });
+
+    if (tokenInConfig.isNative) {
+        // Check Native ETH balance
+        const balance = await publicClient.getBalance({ address: accountAddress as `0x${string}` });
+        if (balance < amountBigInt) {
+            throw new Error(`Insufficient ETH balance. Have: ${formatUnits(balance, 18)}, Need: ${amount}`);
+        }
+    } else {
+        // Check ERC-20 balance
+        const erc20Abi = parseAbi(["function balanceOf(address owner) view returns (uint256)"]);
+        const balance = await publicClient.readContract({
+            address: tokenInAddress as `0x${string}`,
+            abi: erc20Abi,
+            functionName: "balanceOf",
+            args: [accountAddress as `0x${string}`]
+        }) as bigint;
+
+        if (balance < amountBigInt) {
+            throw new Error(`Insufficient ${selectedTokenIn} balance. Have: ${formatUnits(balance, tokenInConfig.decimals)}, Need: ${amount}`);
+        }
+    }
+    
+    console.log(`      -> Balance verified! Proceeding with batch...`);
+    // --- END GUARDRAIL ---
+
     const calls: any[] = [];
 
     // --- BATCH 1: ERC-20 APPROVAL ---
@@ -63,7 +107,12 @@ export const swapUniswap = async (inputs: ActionInput, context: ExecutionContext
         data: calldata
     });
 
+    console.log(`      -> Sending ${calls.length} batched transaction(s) via UserOperation...`);
+
     const userOpHash = await nexusClient.sendUserOperation({ calls });
+    
+    console.log(`      -> UserOp Sent (Hash: ${userOpHash}). Waiting for bundler...`);
+
     const receipt = await nexusClient.waitForUserOperationReceipt({ hash: userOpHash });
     const txHash = receipt.receipt.transactionHash;
 
@@ -75,4 +124,4 @@ export const swapUniswap = async (inputs: ActionInput, context: ExecutionContext
         "EXPLORER_LINK": explorerLink,
         "STATUS": "Success"
     };
-};
+};       
