@@ -319,7 +319,8 @@ app.get('/schedules', async (req, res) => {
             name: job.name,
             id: job.id, // This is the workflowId we passed earlier
             pattern: job.pattern || `Every ${job.every / 60000} mins`,
-            nextRun: new Date(job.next).toLocaleString()
+            nextRun: new Date(job.next).toLocaleString(),
+            nextRunTimestamp: job.next // <-- Added this line to pass the raw timestamp to the frontend
         }));
 
         res.json({ success: true, jobs: formattedJobs });

@@ -12,12 +12,31 @@ import {
   Check,
   Coins,
   Lock,
+  // newly added generic select icons:
+  Plus,
+  Minus,
+  Divide,
+  Percent,
+  Send,
+  FileText,
+  Trash2,
+  Type,
+  ArrowRightLeft,
+  Hash,
+  Clock,
+  CalendarClock,
+  List,
+  AlignLeft,
+  Zap,
+  MessageCircle,
+  Ruler,
 } from "lucide-react";
 import { NODE_TYPES, CATEGORY_COLORS } from "@/lib/nodeConfig";
 import LogicBuilder from "./LogicBuilder";
 
-// Helper to grab generic token SVGs
-const getTokenIcon = (opt: string, disabled: boolean = false) => {
+// --- Upgraded: Generic Icon Mapper for all Select Options ---
+const getSelectOptionIcon = (opt: string, disabled: boolean = false) => {
+  // 1. Web3 Token Icons
   const tokenIcons: Record<string, string> = {
     ETH: "https://cryptologos.cc/logos/ethereum-eth-logo.svg?v=025",
     USDC: "https://cryptologos.cc/logos/usd-coin-usdc-logo.svg?v=025",
@@ -33,22 +52,87 @@ const getTokenIcon = (opt: string, disabled: boolean = false) => {
       <img
         src={tokenIcons[opt]}
         alt={opt}
-        className={`w-4.5 h-4.5 rounded-full shadow-sm ${opacityClass}`}
+        className={`rounded-full shadow-sm ${opacityClass}`}
+        style={{ width: "18px", height: "18px" }} // Fixed sizing constraint
       />
     );
   }
-  if (opt === "Custom") {
-    return (
-      <Coins
-        size={16}
-        className={disabled ? "text-slate-300" : "text-indigo-500"}
-      />
-    );
+
+  // 2. Standard / Generic Option Icons
+  const IconProps = {
+    size: 16,
+    className: disabled ? "text-slate-300" : "text-indigo-500",
+  };
+
+  switch (opt?.toLowerCase()) {
+    case "custom":
+      return <Coins {...IconProps} />;
+
+    // Math
+    case "add":
+      return <Plus {...IconProps} />;
+    case "subtract":
+      return <Minus {...IconProps} />;
+    case "multiply":
+      return <X {...IconProps} />; // Repurposing X for multiply
+    case "divide":
+      return <Divide {...IconProps} />;
+    case "percent":
+      return <Percent {...IconProps} />;
+
+    // HTTP
+    case "get":
+      return <Search {...IconProps} />;
+    case "post":
+      return <Send {...IconProps} />;
+    case "put":
+      return <FileText {...IconProps} />;
+    case "delete":
+      return <Trash2 {...IconProps} />;
+
+    // Transform
+    case "upper":
+    case "lower":
+      return <Type {...IconProps} />;
+    case "replace":
+      return <ArrowRightLeft {...IconProps} />;
+    case "parse_number":
+      return <Hash {...IconProps} />;
+
+    // Timer
+    case "interval":
+      return <Clock {...IconProps} />;
+    case "cron":
+      return <CalendarClock {...IconProps} />;
+
+    // Formats / AI
+    case "bullet points":
+      return <List {...IconProps} />;
+    case "paragraph":
+      return <AlignLeft {...IconProps} />;
+    case "tldr":
+      return <Zap {...IconProps} />;
+    case "tweet":
+      return <MessageCircle {...IconProps} />;
+    case "short":
+    case "medium":
+    case "long":
+      return <Ruler {...IconProps} />;
+    case "true":
+    case "false":
+      return <Check {...IconProps} />;
+
+    default:
+      // Graceful fallback for unknown strings (maintains perfect spacing)
+      return (
+        <div
+          className={`w-1.5 h-1.5 rounded-full ml-1 ${disabled ? "bg-slate-200" : "bg-indigo-300"}`}
+        />
+      );
   }
-  return null;
 };
 
-// --- New: Deterministic Gradient Avatar for Addresses ---
+// --- Deterministic Gradient Avatar for Addresses ---
 const AddressAvatar = ({
   seed,
   disabled,
@@ -404,16 +488,16 @@ export default function PropertiesPanel({
                         }`}
                       >
                         <div className="flex items-center gap-2.5">
-                          {getTokenIcon(
+                          {getSelectOptionIcon(
                             currentData[input.name] || "",
                             isDisabled,
                           )}
                           <span
-                            className={
+                            className={`capitalize ${
                               !currentData[input.name] || isDisabled
                                 ? "text-slate-400"
                                 : "text-slate-800 font-medium"
-                            }
+                            }`}
                           >
                             {currentData[input.name] || "Select an option"}
                           </span>
@@ -441,13 +525,13 @@ export default function PropertiesPanel({
                               }`}
                             >
                               <div className="flex items-center gap-3">
-                                {getTokenIcon(opt)}
+                                {getSelectOptionIcon(opt)}
                                 <span
-                                  className={
+                                  className={`capitalize ${
                                     currentData[input.name] === opt
                                       ? "text-indigo-700 font-semibold"
                                       : "text-slate-700 group-hover:text-slate-900"
-                                  }
+                                  }`}
                                 >
                                   {opt}
                                 </span>
