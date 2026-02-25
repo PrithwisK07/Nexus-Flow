@@ -11,20 +11,30 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const PIMLICO_API_KEY = process.env.PIMLICO_API_KEY;
-const PRIVATE_KEY = process.env.MASTER_KEY as `0x${string}`;
-const RPC_URL = process.env.RPC_URL as string;
-const USDC_ADDRESS = process.env.USDC_ADDRESS as`0x${string}`;
+const PRIVATE_KEY = process.env.MASTER_KEY as `0x${string}` | undefined;
+const RPC_URL = process.env.RPC_URL as string | undefined;
+const USDC_ADDRESS = process.env.USDC_ADDRESS as `0x${string}` | undefined;
 
 const transportUrl = `https://api.pimlico.io/v2/sepolia/rpc?apikey=${PIMLICO_API_KEY}`;
 
 export const createNexusAccount = async (userIndex: number) => {
+
+    if (!PRIVATE_KEY) {
+        throw new Error("MASTER_KEY is not configured in server/.env");
+    }
+    if (!RPC_URL) {
+        throw new Error("RPC_URL is not configured in server/.env");
+    }
+    if (!PIMLICO_API_KEY) {
+        throw new Error("PIMLICO_API_KEY is not configured in server/.env");
+    }
 
     const signer = privateKeyToAccount(PRIVATE_KEY);
 
     const publicClient = createPublicClient({
         transport: http(RPC_URL),
         chain: sepolia,
-    })
+    });
 
     const pimlicoClient = createPimlicoClient({
         transport: http(transportUrl),

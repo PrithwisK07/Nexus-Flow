@@ -123,6 +123,11 @@ app.post("/trigger-workflow", async (req, res) => {
         // 🟢 THE HOT RELOAD FIX: Save the configuration to Redis instead of BullMQ!
         await redisConnection.set(`workflow_config:${workflowId}`, JSON.stringify(workflowConfig));
 
+        // When this name is (re)activated as webhook, clear any old tombstone so 410 only if truly inactive
+        if (isWebhook) {
+            await redisConnection.del(`workflow_tombstone:${workflowId}`);
+        }
+
         // --- 🚀 HANDLE "RUN NOW" MANUAL OVERRIDE ---
         if (isTestRun) {
             const immediateId = `test_run_${Date.now()}`;
@@ -263,27 +268,29 @@ app.post('/webhook/:workflowId', async (req, res) => {
             return res.status(400).json({ error: "Malformed webhook name." });
         }
 
-        // 1. Check for tombstone (renamed / deleted)
-        const tombstoneKey = `workflow_tombstone:${workflowId}`;
-        const tombstoneRaw = await redisConnection.get(tombstoneKey);
-        if (tombstoneRaw) {
-            try {
-                const tombstone = JSON.parse(tombstoneRaw);
-                console.warn(
-                    `🚫 Webhook called for inactive workflowId=${workflowId} (status=${tombstone.status || 'unknown'})`,
-                );
-            } catch {
-                console.warn(`🚫 Webhook called for inactive workflowId=${workflowId} (malformed tombstone)`);
-            }
-
-            return res.status(410).json({
-                error: "This webhook has been renamed or deleted.",
-            });
-        }
-
-        // 2. Check if this workflow exists and is deployed
+        // 1. Validate against current active workflow first (name can become active again after rename-back)
         const configString = await redisConnection.get(`workflow_config:${workflowId}`);
-        if (!configString) {
+        if (configString) {
+            // Active config exists → webhook is valid (even if an old tombstone exists from a previous rename)
+            // Fall through to queue logic below
+        } else {
+            // 2. No active config: return 410 only if this name was previously active (tombstone)
+            const tombstoneKey = `workflow_tombstone:${workflowId}`;
+            const tombstoneRaw = await redisConnection.get(tombstoneKey);
+            if (tombstoneRaw) {
+                try {
+                    const tombstone = JSON.parse(tombstoneRaw);
+                    console.warn(
+                        `🚫 Webhook called for inactive workflowId=${workflowId} (status=${tombstone.status || 'unknown'})`,
+                    );
+                } catch {
+                    console.warn(`🚫 Webhook called for inactive workflowId=${workflowId} (malformed tombstone)`);
+                }
+                return res.status(410).json({
+                    error: "This webhook has been renamed or deleted.",
+                });
+            }
+            // 3. Never deployed under this name
             console.warn(`❓ Webhook not found for workflowId=${workflowId}`);
             return res.status(404).json({ error: "Webhook not found. Has this workflow been deployed?" });
         }
@@ -359,6 +366,53 @@ app.post('/test-node', async (req, res) => {
     } catch (error: any) {
         console.error(`Test Node Error (${req.body.type}):`, error.message);
         res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// --- API ROUTE: RESUME PAUSED WORKFLOW ---
+app.post('/resume-workflow', async (req, res) => {
+    const { workflowId, jobId } = req.body;
+
+    if (!workflowId || !jobId) {
+        return res.status(400).json({ success: false, error: "Missing workflowId or jobId" });
+    }
+
+    try {
+        const pauseKey = `workflow_pause:${workflowId}:${jobId}`;
+        const raw = await redisConnection.get(pauseKey);
+
+        if (!raw) {
+            return res.status(404).json({ success: false, error: "No paused workflow state found." });
+        }
+
+        const pauseState = JSON.parse(raw);
+        if (!pauseState.remainingActions || !pauseState.context) {
+            return res.status(500).json({ success: false, error: "Paused state is corrupted." });
+        }
+
+        // Prevent multiple resumes from the same paused state
+        await redisConnection.del(pauseKey);
+
+        const executionId = `resume_${Date.now()}`;
+
+        await workflowQueue.add(
+            'execute-workflow',
+            {
+                context: pauseState.context,
+                requestedAt: new Date().toISOString(),
+                workflowId: workflowId,
+                executionId,
+                resume: true,
+                remainingActions: pauseState.remainingActions,
+                spreadsheetIdOverride: pauseState.spreadsheetId || null,
+            },
+            { jobId: executionId }
+        );
+
+        return res.status(202).json({ success: true, jobId: executionId });
+    } catch (error: any) {
+        console.error("❌ Resume Workflow Error:", error);
+        return res.status(500).json({ success: false, error: "Failed to resume workflow." });
     }
 });
 

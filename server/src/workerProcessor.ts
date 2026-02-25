@@ -43,7 +43,8 @@ const executeChain = async (
     jobId?: string 
 ): Promise<ExecutionContext> => {
     
-    for (const action of actions) {
+    for (let index = 0; index < actions.length; index++) {
+        const action = actions[index];
         console.log(`   ➡️ Executing: ${action.type} [${action.id}]`);
 
         // 1. NOTIFY: Node Started
@@ -147,9 +148,51 @@ const executeChain = async (
             if (jobId) await emitEvent(jobId, 'node_completed', { nodeId: action.id, result });
 
         } catch (err: any) {
-            console.error(`   ❌ Error at ${action.type}: ${err.message}`);
-            // 3. NOTIFY: Node Failed
-            if (jobId) await emitEvent(jobId, 'node_failed', { nodeId: action.id, error: err.message });
+            const errorMessage = err?.message || String(err);
+            console.error(`   ❌ Error at ${action.type}: ${errorMessage}`);
+
+            // Special handling for actionable insufficient balance errors
+            const isActionRequired = typeof errorMessage === 'string' && errorMessage.startsWith('[ACTION_REQUIRED]');
+            const isDepositRequired = isActionRequired && errorMessage.includes('"DEPOSIT_REQUIRED"');
+
+            if (isDepositRequired && jobId) {
+                try {
+                    const workflowId = context.SYSTEM_WORKFLOW_ID as string | undefined;
+                    if (workflowId) {
+                        const pauseKey = `workflow_pause:${workflowId}:${jobId}`;
+                        const remainingActions = actions.slice(index); // Resume from this node onward
+
+                        const pauseState = {
+                            workflowId,
+                            jobId,
+                            nodeId: action.id,
+                            reason: 'PAUSED_INSUFFICIENT_BALANCE',
+                            context,
+                            remainingActions,
+                            spreadsheetId: spreadsheetId || null,
+                        };
+
+                        await redisConnection.set(pauseKey, JSON.stringify(pauseState));
+
+                        // Mark workflow as paused for the frontend
+                        await emitEvent(jobId, 'workflow_paused', {
+                            nodeId: action.id,
+                            reason: 'PAUSED_INSUFFICIENT_BALANCE',
+                        });
+                    }
+                } catch (pauseErr) {
+                    console.error('   ❌ Failed to persist pause state:', pauseErr);
+                }
+            }
+
+            // 3. NOTIFY: Node Failed (includes actionable errors for the UI)
+            if (jobId) {
+                await emitEvent(jobId, 'node_failed', { 
+                    nodeId: action.id, 
+                    error: errorMessage,
+                });
+            }
+
             throw err; // Stop this chain
         }
     }
@@ -182,6 +225,15 @@ export default async function workerProcessor(job: Job) {
             config = job.data.config;
         } else {
             throw new Error(`Configuration for ${workflowId} not found in Redis. It may have been deleted.`);
+        }
+
+        // If this is a resume job, override actions (and optional spreadsheetId) from pause state
+        if (job.data.resume && Array.isArray(job.data.remainingActions)) {
+            console.log(`   🔁 Resume Mode: Continuing paused workflow ${workflowId}...`);
+            config.actions = job.data.remainingActions;
+            if (job.data.spreadsheetIdOverride) {
+                config.spreadsheetId = job.data.spreadsheetIdOverride;
+            }
         }
 
         // --- MODE SETUP ---

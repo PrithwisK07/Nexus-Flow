@@ -142,7 +142,7 @@ function NexusCanvas() {
   // --- 1. REAL-TIME EXECUTION LISTENER ---
   useEffect(() => {
     socket.on("workflow_update", (event) => {
-      const { type, nodeId, result, error } = event;
+      const { type, nodeId, result, error, jobId, workflowId } = event as any;
 
       if (type === "workflow_run_started") {
         setNodes((nds) =>
@@ -178,7 +178,14 @@ function NexusCanvas() {
           const payload = JSON.parse(payloadStr);
 
           if (payload.code === "DEPOSIT_REQUIRED") {
-            setDepositData(payload);
+            // Attach workflow + job identifiers so we can resume correctly
+            const extendedPayload = {
+              ...payload,
+              workflowId: payload.workflowId || workflowId || activeJobId,
+              jobId: jobId || activeJobId,
+            };
+
+            setDepositData(extendedPayload);
             setIsDepositModalOpen(true);
           }
         } catch (e) {
@@ -272,7 +279,7 @@ function NexusCanvas() {
     return () => {
       socket.off("workflow_update");
     };
-  }, [setEdges, setNodes]);
+  }, [setEdges, setNodes, activeJobId]);
 
   // Undo/Redo Logic
   useEffect(() => {
@@ -821,6 +828,35 @@ function NexusCanvas() {
         isOpen={isDepositModalOpen}
         onClose={() => setIsDepositModalOpen(false)}
         depositData={depositData}
+        onResume={async (workflowId: string, pausedJobId: string) => {
+          try {
+            const response = await fetch("http://localhost:3001/resume-workflow", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ workflowId, jobId: pausedJobId }),
+            });
+
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+              console.error("Failed to resume workflow:", data.error);
+              toast.error("Failed to resume workflow", {
+                description: data.error || "Unknown resume error.",
+              });
+              return;
+            }
+
+            const newJobId = data.jobId;
+            setActiveJobId(newJobId);
+            socket.emit("subscribe_job", newJobId);
+            console.log(`🔁 Resumed workflow. Subscribed to room: ${newJobId}`);
+            toast.success("Workflow resumed!", { duration: 3000 });
+          } catch (err: any) {
+            console.error("Resume workflow request failed:", err);
+            toast.error("Failed to resume workflow", {
+              description: err.message || "Network error.",
+            });
+          }
+        }}
       />
 
       {/* ACTIVE SCHEDULES MODAL */}

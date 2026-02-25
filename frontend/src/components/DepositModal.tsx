@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   Wallet,
   Loader2,
@@ -9,7 +9,12 @@ import {
 } from "lucide-react";
 import { parseAbi } from "viem";
 import { toast } from "sonner";
-import { useAccount, useSendTransaction, useWriteContract } from "wagmi";
+import {
+  useAccount,
+  useSendTransaction,
+  useWaitForTransactionReceipt,
+  useWriteContract,
+} from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 
 // Helper to shorten the Ethereum address
@@ -18,7 +23,7 @@ const truncateAddress = (address: string) => {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 };
 
-export default function DepositModal({ isOpen, onClose, depositData }: any) {
+export default function DepositModal({ isOpen, onClose, depositData, onResume }: any) {
   const { isConnected } = useAccount();
 
   // Wagmi hooks for sending transactions
@@ -26,9 +31,18 @@ export default function DepositModal({ isOpen, onClose, depositData }: any) {
     useSendTransaction();
   const { writeContractAsync, isPending: isWritingERC20 } = useWriteContract();
 
-  if (!isOpen || !depositData) return null;
+  // Track the deposit transaction hash until it's confirmed
+  const [pendingHash, setPendingHash] = useState<`0x${string}` | null>(null);
+  const [hasResumed, setHasResumed] = useState(false);
 
-  const isProcessing = isSendingETH || isWritingERC20;
+  const {
+    isSuccess: isConfirmed,
+    isLoading: isConfirming,
+  } = useWaitForTransactionReceipt({
+    hash: pendingHash ?? undefined,
+  });
+
+  const isProcessing = isSendingETH || isWritingERC20 || isConfirming;
 
   const handleDeposit = async () => {
     try {
@@ -53,12 +67,13 @@ export default function DepositModal({ isOpen, onClose, depositData }: any) {
         });
       }
 
+      setPendingHash(txHash as `0x${string}`);
+      setHasResumed(false);
+
       toast.success("Deposit submitted!", {
-        description: `Hash: ${truncateAddress(txHash)}`,
+        description: `Waiting for confirmation... ${truncateAddress(txHash)}`,
         duration: 5000,
       });
-
-      onClose(); // Close modal so user can test their workflow again
     } catch (error: any) {
       console.error("Deposit Failed:", error);
       toast.error("Transaction Failed", {
@@ -67,6 +82,29 @@ export default function DepositModal({ isOpen, onClose, depositData }: any) {
       });
     }
   };
+
+  // Auto-resume ONLY after the deposit transaction is confirmed on-chain
+  useEffect(() => {
+    if (!pendingHash || !isConfirmed) return;
+
+    toast.success("Deposit confirmed!", {
+      description: `Hash: ${truncateAddress(pendingHash)}`,
+      duration: 5000,
+    });
+
+    // Close modal
+    onClose();
+
+    // Trigger resume once per confirmed deposit
+    if (!hasResumed && onResume && depositData?.workflowId && depositData?.jobId) {
+      setHasResumed(true);
+      onResume(depositData.workflowId, depositData.jobId);
+    }
+
+    setPendingHash(null);
+  }, [pendingHash, isConfirmed, onClose, onResume, depositData, hasResumed]);
+
+  if (!isOpen || !depositData) return null;
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">

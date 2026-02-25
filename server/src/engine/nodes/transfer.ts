@@ -64,7 +64,8 @@ export const transfer = async (inputs: ActionInput, context: ExecutionContext) =
             isNative: tokenConfig.isNative,
             missingAmountRaw: missingAmountBigInt.toString(), 
             missingAmountFormatted: formatUnits(missingAmountBigInt, tokenConfig.decimals),
-            accountAddress: accountAddress
+            accountAddress: accountAddress,
+            workflowId: (context as any).SYSTEM_WORKFLOW_ID || null,
         };
 
         // Throwing this prefix triggers the UI to intercept it instead of just showing a generic error
