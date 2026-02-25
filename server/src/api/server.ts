@@ -67,7 +67,12 @@ redisSubscriber.on('message', (channel, message) => {
 // --- API ROUTE: PRODUCER (DEPLOY & TEST) ---
 app.post("/trigger-workflow", async (req, res) => {
     // 🟢 EXTRACT isTestRun FLAG
-    const { config: workflowConfig, context: manualContext = {}, isTestRun } = req.body; 
+    const { 
+        config: workflowConfig, 
+        context: manualContext = {}, 
+        isTestRun,
+        previousWorkflowId
+    } = req.body; 
 
     if (!workflowConfig) {
         return res.status(400).send({ error: "Missing workflow configuration." });
@@ -88,6 +93,31 @@ app.post("/trigger-workflow", async (req, res) => {
             workflowId = `cron_workflow_${safeName}`;
         } else if (isWebhook) {
             workflowId = `workflow_${safeName}`;
+        }
+
+        // 🟢 HANDLE WEBHOOK RENAME / INVALIDATION
+        if (isWebhook) {
+            const previousId = typeof previousWorkflowId === 'string' ? previousWorkflowId : null;
+            if (previousId && previousId !== workflowId) {
+                try {
+                    const tombstoneKey = `workflow_tombstone:${previousId}`;
+                    await redisConnection.set(
+                        tombstoneKey,
+                        JSON.stringify({
+                            status: 'renamed',
+                            newWorkflowId: workflowId,
+                            renamedAt: new Date().toISOString(),
+                        }),
+                    );
+
+                    // Optionally remove the old config to avoid stale executions
+                    await redisConnection.del(`workflow_config:${previousId}`);
+
+                    console.log(`⚰️  Tombstoned old webhook workflowId=${previousId} -> renamed to ${workflowId}`);
+                } catch (err) {
+                    console.error('❌ Failed to create webhook tombstone for', previousId, err);
+                }
+            }
         }
 
         // 🟢 THE HOT RELOAD FIX: Save the configuration to Redis instead of BullMQ!
@@ -227,13 +257,38 @@ app.post('/webhook/:workflowId', async (req, res) => {
     const { workflowId } = req.params;
 
     try {
-        // 1. Check if this workflow exists and is deployed
+        // 0. Basic validation on webhookId format
+        if (typeof workflowId !== 'string' || !workflowId.startsWith('workflow_')) {
+            console.warn(`⚠️ Malformed webhook name received: ${workflowId}`);
+            return res.status(400).json({ error: "Malformed webhook name." });
+        }
+
+        // 1. Check for tombstone (renamed / deleted)
+        const tombstoneKey = `workflow_tombstone:${workflowId}`;
+        const tombstoneRaw = await redisConnection.get(tombstoneKey);
+        if (tombstoneRaw) {
+            try {
+                const tombstone = JSON.parse(tombstoneRaw);
+                console.warn(
+                    `🚫 Webhook called for inactive workflowId=${workflowId} (status=${tombstone.status || 'unknown'})`,
+                );
+            } catch {
+                console.warn(`🚫 Webhook called for inactive workflowId=${workflowId} (malformed tombstone)`);
+            }
+
+            return res.status(410).json({
+                error: "This webhook has been renamed or deleted.",
+            });
+        }
+
+        // 2. Check if this workflow exists and is deployed
         const configString = await redisConnection.get(`workflow_config:${workflowId}`);
         if (!configString) {
+            console.warn(`❓ Webhook not found for workflowId=${workflowId}`);
             return res.status(404).json({ error: "Webhook not found. Has this workflow been deployed?" });
         }
 
-        // 2. Capture the incoming data from the external app
+        // 3. Capture the incoming data from the external app
         // We nest it inside "WebhookBody" so users can access it cleanly
         const externalContext = {
             WebhookBody: req.body,       // The JSON payload (e.g., Stripe payment data)
@@ -241,7 +296,7 @@ app.post('/webhook/:workflowId', async (req, res) => {
             WebhookHeaders: req.headers  // Useful for signature verification later
         };
 
-        // 3. Queue the job in BullMQ
+        // 4. Queue the job in BullMQ
         const executionId = `webhook_exec_${Date.now()}`;
         
         await workflowQueue.add(

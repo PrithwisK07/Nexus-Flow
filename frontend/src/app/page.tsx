@@ -319,7 +319,7 @@ function NexusCanvas() {
       nds.map((n) => ({ ...n, data: { ...n.data, executionData: null } })),
     );
 
-    const promise = deploy(globalSettings.name, globalSettings);
+    const promise = deploy(globalSettings.name, globalSettings, activeJobId);
     const result = await promise;
 
     if (result.success) {

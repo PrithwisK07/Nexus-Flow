@@ -165,7 +165,11 @@ export const useDeployment = () => {
   };
 
   // --- EXPORT 1: PRIMARY DEPLOYMENT ---
-  const deploy = async (workflowName: string, globalSettings: any) => {
+  const deploy = async (
+    workflowName: string,
+    globalSettings: any,
+    previousWorkflowId?: string | null,
+  ) => {
     setIsDeploying(true);
     const nodes = getNodes();
     const edges = getEdges();
@@ -178,10 +182,14 @@ export const useDeployment = () => {
         globalSettings,
       );
 
-      const payload = {
+      const payload: any = {
         config,
         context: { TEST_USER: "Frontend_Deploy" },
       };
+
+      if (previousWorkflowId) {
+        payload.previousWorkflowId = previousWorkflowId;
+      }
 
       console.log("🚀 Payload:", JSON.stringify(payload, null, 2));
 

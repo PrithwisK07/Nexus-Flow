@@ -15,8 +15,39 @@ export const CATEGORY_COLORS: Record<string, any> = {
 };
 
 export const NODE_TYPES: Record<string, any> = {
-  
-  // --- TRIGGERS ---
+  // ... (Triggers and Web3 nodes remain unchanged)
+
+  // --- DATA ---
+  'get_price': { 
+    label: 'Get Token Price', 
+    category: 'data', 
+    icon: Database,
+    inputs: [
+      { 
+        name: 'tokenId', 
+        label: 'Token (Select or Type ID)', 
+        type: 'select', // Assuming your PropertiesPanel allows typing in select or uses a custom-input variant
+        placeholder: 'e.g. ethereum',
+        options: [
+          'aave',
+          'arbitrum',
+          'bitcoin',
+          'chainlink',
+          'dai',
+          'ethereum',
+          'optimism',
+          'polygon-ecosystem-token',
+          'tether',
+          'uniswap',
+          'usd-coin',
+          'wrapped-bitcoin'
+        ].sort() // Ensures the list is sorted alphabetically
+      }
+    ],
+    outputs: [{ name: 'PRICE', desc: 'Token Price (USD)' }]
+  },
+
+  // ... (Other nodes remain exactly as they were in your previous file)
   'webhook': { 
     label: 'Webhook Trigger', category: 'trigger', icon: Zap,
     inputs: [
@@ -35,7 +66,6 @@ export const NODE_TYPES: Record<string, any> = {
       { name: 'colIndex', label: 'Column Index (0=A)', type: 'number', placeholder: '4' },
       { name: 'value', label: 'Trigger Value', type: 'text', placeholder: 'Pending' }
     ]
-    // Note: Sheet variables are handled dynamically via Global Settings Mapping
   },
   'timer': {
     label: 'Schedule / Cron', category: 'trigger', icon: Clock,
@@ -45,8 +75,6 @@ export const NODE_TYPES: Record<string, any> = {
       { name: 'cronExpression', label: 'Cron Expression', type: 'text', placeholder: '0 12 * * *', required: false }
     ]
   },
-
-  // --- WEB3 ---
   'transfer': { 
     label: 'Transfer Token', category: 'web3', icon: Send,
     inputs: [
@@ -70,18 +98,6 @@ export const NODE_TYPES: Record<string, any> = {
     ],
     outputs: [{ name: 'TX_HASH', desc: 'Swap Transaction Hash' }]
   },
-
-  // Issues with Aave v3 protocols:
-  // 'aave_supply': { 
-  //   label: 'Aave Supply', category: 'web3', icon: Layers,
-  //   inputs: [
-  //     { name: 'asset', label: 'Asset Address', type: 'text', placeholder: '0x...' },
-  //     { name: 'amount', label: 'Amount', type: 'text' },
-  //     { name: 'onBehalfOf', label: 'On Behalf Of', type: 'text', placeholder: '0x...' },
-  //     { name: 'decimals', label: 'Decimals (Opt)', type: 'number', placeholder: '18', required: false },
-  //   ],
-  //   outputs: [{ name: 'TX_HASH', desc: 'Supply Transaction Hash' }]
-  // },
   'read_contract': { 
     label: 'Read Contract', category: 'web3', icon: Search,
     inputs: [
@@ -110,13 +126,6 @@ export const NODE_TYPES: Record<string, any> = {
     label: 'Get Gas Price', category: 'data', icon: Flame,
     inputs: [],
     outputs: [{ name: 'GAS_PRICE', desc: 'Current Gas (Gwei)' }] 
-  },
-
-  // --- DATA ---
-  'get_price': { 
-    label: 'Get Token Price', category: 'data', icon: Database,
-    inputs: [{ name: 'tokenId', label: 'Coingecko ID', type: 'text', placeholder: 'ethereum' }],
-    outputs: [{ name: 'PRICE', desc: 'Token Price (USD)' }]
   },
   'http_request': { 
     label: 'HTTP Request', category: 'data', icon: Globe,
@@ -150,8 +159,6 @@ export const NODE_TYPES: Record<string, any> = {
       { name: 'SCRAPED_CONTENT', desc: 'Cleaned Text Content' }
     ]
   },
-
-  // --- LOGIC ---
   'math_operation': { 
     label: 'Math Operator', category: 'logic', icon: Calculator,
     inputs: [
@@ -178,7 +185,6 @@ export const NODE_TYPES: Record<string, any> = {
       { name: 'path', label: 'Path', type: 'text', placeholder: 'data.price' },
       { name: 'outputVar', label: 'Output Alias', type: 'text', placeholder: 'MY_VAR', required: false },
     ],
-    // Special case: The UI uses the 'sourceField' to name the variable dynamically
     outputs: [{ name: 'dynamic', sourceField: 'outputVar', desc: 'Extracted Value' }]
   },
   'format_date': { 
@@ -189,8 +195,6 @@ export const NODE_TYPES: Record<string, any> = {
     ],
     outputs: [{ name: 'FORMATTED_DATE', desc: 'Formatted Date String' }]
   },
-
-  // --- NOTIFY & OPS (No outputs usually) ---
   'discord_notify': { 
     label: 'Discord Msg', category: 'notify', icon: MessageSquare,
     inputs: [
@@ -244,11 +248,9 @@ export const NODE_TYPES: Record<string, any> = {
     icon: GitMerge,
     config: { description: 'Waits for all inputs to complete' },
     inputs: [
-      // No inputs needed! It just exists to join paths.
-      // But we can add a dummy read-only field for clarity.
       { name: '_info', label: 'Behavior', type: 'text', placeholder: 'Waits for all branches', readOnly: true }
     ],
-    outputs: [] // No specific outputs, it passes context through
+    outputs: []
   },
   'wallet_balance': { 
     label: 'Read Wallet Balance', category: 'web3', icon: Wallet,
@@ -259,7 +261,6 @@ export const NODE_TYPES: Record<string, any> = {
     ],
     outputs: [{ name: 'BALANCE', desc: 'Formatted Token Balance' }]
   },
-  // --- AI ---
   'gemini_prompt': { 
     label: 'Gemini LLM', category: 'ai', icon: Sparkles,
     inputs: [
@@ -279,7 +280,6 @@ export const NODE_TYPES: Record<string, any> = {
     ],
     outputs: [{ name: 'dynamic', sourceField: 'schema', desc: 'Parsed JSON Keys' }] 
   },
-
   'ai_summarizer': { 
     label: 'Text Summarizer', category: 'ai', icon: FileText,
     inputs: [
@@ -290,7 +290,6 @@ export const NODE_TYPES: Record<string, any> = {
     ],
     outputs: [{ name: 'SUMMARY', desc: 'The summarized text' }] 
   },
-
   'ai_sentiment': { 
     label: 'Market Sentiment', category: 'ai', icon: TrendingUp,
     inputs: [
