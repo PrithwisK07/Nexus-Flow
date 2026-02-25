@@ -4,7 +4,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "tsx watch src/api/server.ts"
+    "dev": "tsx watch src/api/server.ts",
+    "worker": "tsx watch src/worker.ts"
   },
   "type": "module",
   "keywords": [],
