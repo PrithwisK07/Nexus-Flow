@@ -337,7 +337,7 @@ function NexusCanvas() {
         duration: 4000,
       });
 
-      const returnedJobId = result.jobId || (result.data && result.data.jobId);
+      const returnedJobId = result.data && result.data.jobId;
 
       if (returnedJobId) {
         setActiveJobId(returnedJobId);
