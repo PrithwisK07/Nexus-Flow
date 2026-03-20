@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Node, Edge, useReactFlow } from "reactflow";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
 export const useDeployment = () => {
   const [isDeploying, setIsDeploying] = useState(false);
   const { getNodes, getEdges } = useReactFlow();
@@ -193,7 +195,7 @@ export const useDeployment = () => {
 
       console.log("🚀 Payload:", JSON.stringify(payload, null, 2));
 
-      const response = await fetch("http://localhost:3001/trigger-workflow", {
+      const response = await fetch(`${API_BASE_URL}/trigger-workflow`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -240,7 +242,7 @@ export const useDeployment = () => {
       };
 
       // Silently push updates to Redis
-      await fetch("http://localhost:3001/hot-reload", {
+      await fetch(`${API_BASE_URL}/hot-reload`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -279,7 +281,7 @@ export const useDeployment = () => {
         },
       };
 
-      const response = await fetch("http://localhost:3001/trigger-workflow", {
+      const response = await fetch(`${API_BASE_URL}/trigger-workflow`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

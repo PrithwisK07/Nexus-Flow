@@ -14,6 +14,8 @@ export const CATEGORY_COLORS: Record<string, any> = {
   ai: { bg: 'bg-fuchsia-50', border: 'border-fuchsia-200', text: 'text-fuchsia-600', accent: 'bg-fuchsia-500' },
 };
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
 export const NODE_TYPES: Record<string, any> = {
   
   // --- TRIGGERS ---
@@ -25,7 +27,7 @@ export const NODE_TYPES: Record<string, any> = {
         label: 'How to use', 
         type: 'textarea', 
         readOnly: true,
-        placeholder: "1. Name your workflow in Settings.\n2. Click Deploy.\n3. Send POST requests to:\nhttp://localhost:3001/webhook/workflow_[your_workflow_name]\n\nAccess payload variables using: {{WebhookBody.your_field}}"
+        placeholder: `1. Name your workflow in Settings.\n2. Click Deploy.\n3. Send POST requests to:\n${API_BASE_URL}/webhook/workflow_[your_workflow_name]\n\nAccess payload variables using: {{WebhookBody.your_field}}`
       } 
     ] 
   },
