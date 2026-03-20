@@ -166,7 +166,7 @@ app.post("/trigger-workflow", async (req, res) => {
 
         // --- 1. HANDLE WEBHOOK DEPLOYMENTS ---
         if (isWebhook) {
-            const baseUrl = process.env.PUBLIC_URL || `http://localhost:${PORT}`;
+            const baseUrl = process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_URL || `http://localhost:${PORT}`;
             const webhookUrl = `${baseUrl}/webhook/${workflowId}`;
             
             console.log(`🔗 Webhook Deployed! Listening at: ${webhookUrl}`);
