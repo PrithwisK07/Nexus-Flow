@@ -70,6 +70,9 @@ export default function ActiveSchedulesModal({
   const [schedules, setSchedules] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  const API_BASE_URL =
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
   useEffect(() => {
     if (isOpen) {
       fetchSchedules();
@@ -79,7 +82,7 @@ export default function ActiveSchedulesModal({
   const fetchSchedules = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch("http://localhost:3001/schedules");
+      const res = await fetch(`${API_BASE_URL}/schedules`);
       const data = await res.json();
       if (data.success) {
         setSchedules(data.jobs);
@@ -94,7 +97,7 @@ export default function ActiveSchedulesModal({
   const stopSchedule = async (key: string) => {
     try {
       const res = await fetch(
-        `http://localhost:3001/schedules/${encodeURIComponent(key)}`,
+        `${API_BASE_URL}/schedules/${encodeURIComponent(key)}`,
         { method: "DELETE" },
       );
       const data = await res.json();

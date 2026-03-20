@@ -12,7 +12,7 @@ const app: express.Application = express();
 app.use(cors({ origin: "*" }));
 app.use(bodyParser.json());
 
-const PORT: number = 3001;
+const PORT = process.env.PORT || 3001;
 
 // --- 1. SETUP HTTP & SOCKET SERVER ---
 const server = http.createServer(app);
@@ -166,7 +166,9 @@ app.post("/trigger-workflow", async (req, res) => {
 
         // --- 1. HANDLE WEBHOOK DEPLOYMENTS ---
         if (isWebhook) {
-            const webhookUrl = `http://localhost:${PORT}/webhook/${workflowId}`;
+            const baseUrl = process.env.PUBLIC_URL || `http://localhost:${PORT}`;
+            const webhookUrl = `${baseUrl}/webhook/${workflowId}`;
+            
             console.log(`🔗 Webhook Deployed! Listening at: ${webhookUrl}`);
             
             return res.status(202).send({ 
@@ -461,5 +463,5 @@ app.delete('/schedules/:key', async (req, res) => {
 // --- START SERVER ---
 // Note: We listen on 'server' (HTTP+Socket), not just 'app' (Express)
 server.listen(PORT, () => {
-    console.log(`🚀 Nexus Producer API + Socket Server running on http://localhost:${PORT}`);
+    console.log(`🚀 Nexus Producer API + Socket Server running on port ${PORT}`);
 });

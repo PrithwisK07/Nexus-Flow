@@ -50,8 +50,10 @@ import { useDeployment } from "@/hooks/useDeployment";
 import { NODE_TYPES, CATEGORY_COLORS } from "@/lib/nodeConfig";
 import { FlowContext } from "@/components/flow/FlowContext";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
 // --- SOCKET CONNECTION ---
-const socket = io("http://localhost:3001");
+const socket = io(API_BASE_URL);
 
 const nodeTypes = { nexusNode: NexusNode };
 
@@ -830,7 +832,7 @@ function NexusCanvas() {
         depositData={depositData}
         onResume={async (workflowId: string, pausedJobId: string) => {
           try {
-            const response = await fetch("http://localhost:3001/resume-workflow", {
+            const response = await fetch(`${API_BASE_URL}/resume-workflow`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ workflowId, jobId: pausedJobId }),

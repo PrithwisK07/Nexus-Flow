@@ -9,6 +9,9 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
   const { isCompact } = useFlowContext();
   const { setNodes } = useReactFlow();
 
+  const API_BASE_URL =
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
   const type = data.type || "webhook";
   const config = NODE_TYPES[type] || NODE_TYPES["math_operation"];
   const colors = CATEGORY_COLORS[config.category] || CATEGORY_COLORS.logic;
@@ -42,7 +45,7 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
 
     try {
       // 2. Call the backend endpoint
-      const response = await fetch("http://localhost:3001/test-node", {
+      const response = await fetch(`${API_BASE_URL}/test-node`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
