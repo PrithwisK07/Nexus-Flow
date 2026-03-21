@@ -29,10 +29,12 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
 
   const execStatus = data.executionData?.status;
 
+  // --- INDIVIDUAL NODE TESTING LOGIC ---
   const onTestClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (execStatus === "running") return;
+    if (execStatus === "running") return; // Prevent double clicks
 
+    // 1. Instantly show the "Running" spinner popover
     setNodes((nds) =>
       nds.map((n) =>
         n.id === id
@@ -42,6 +44,7 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
     );
 
     try {
+      // 2. Call the backend endpoint
       const response = await fetch(`${API_BASE_URL}/test-node`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -53,6 +56,7 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
 
       const result = await response.json();
 
+      // 3. Update the popover with Success or Failure
       setNodes((nds) =>
         nds.map((n) =>
           n.id === id
@@ -71,6 +75,7 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
         ),
       );
     } catch (error: any) {
+      // Handle network errors
       setNodes((nds) =>
         nds.map((n) =>
           n.id === id
@@ -87,10 +92,10 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
     }
   };
 
-  // 🟢 MODIFIED: Increased handle size for touch targets on tablet/mobile
   const handleClasses =
-    "w-2 h-2 rounded-full border border-white transition-all duration-200 max-lg:!w-4 max-lg:!h-4 max-sm:!w-5 max-sm:!h-5";
+    "w-2 h-2 rounded-full border border-white transition-all duration-200";
 
+  // --- DYNAMIC EXECUTION STYLES ---
   let execStyles = "";
   if (execStatus === "running") {
     execStyles =
@@ -101,6 +106,7 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
     execStyles = "!ring-4 !ring-red-500/30 !border-red-500 z-20";
   }
 
+  // --- SPECIAL RENDER: MERGE NODE ---
   if (type === "merge") {
     return (
       <div
@@ -120,19 +126,20 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
         <Handle
           type="target"
           position={Position.Left}
-          className="!w-3 !h-3 !border-2 !border-white !bg-indigo-400 hover:scale-125 transition-transform absolute max-lg:!w-4 max-lg:!h-4 max-sm:!w-5 max-sm:!h-5"
+          className="!w-3 !h-3 !border-2 !border-white !bg-indigo-400 hover:scale-125 transition-transform absolute"
           style={{ top: "50%", transform: "translate(-50%, -50%)", left: -9 }}
         />
         <Handle
           type="source"
           position={Position.Right}
-          className="!w-3 !h-3 !border-2 !border-white !bg-indigo-400 hover:scale-125 transition-transform absolute max-lg:!w-4 max-lg:!h-4 max-sm:!w-5 max-sm:!h-5"
+          className="!w-3 !h-3 !border-2 !border-white !bg-indigo-400 hover:scale-125 transition-transform absolute"
           style={{ top: "50%", transform: "translate(50%, -50%)", right: -9 }}
         />
       </div>
     );
   }
 
+  // --- VIEW 1: COMPACT ICON STYLE ---
   if (isCompact) {
     return (
       <div className="relative group flex flex-col items-center">
@@ -153,25 +160,25 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
           </div>
 
           {!isValid && (
-            <div className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 border-2 border-white shadow-sm z-20">
-              <AlertCircle size={8} className="max-lg:w-3 max-lg:h-3" />
+            <div className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 border-2 border-white shadow-sm">
+              <AlertCircle size={8} />
             </div>
           )}
 
+          {/* Hide test button for logic nodes (like condition/merge) */}
           {isValid &&
             config.category !== "trigger" &&
             config.category !== "logic" && (
               <button
                 onClick={onTestClick}
                 disabled={execStatus === "running"}
-                // 🟢 MODIFIED: Always show test button on touch screens
-                className="absolute -top-2 -right-2 bg-slate-800 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 max-lg:opacity-100 transition-all scale-75 group-hover:scale-100 max-lg:scale-100 hover:bg-indigo-600 shadow-lg z-30 disabled:bg-amber-500 max-lg:w-6 max-lg:h-6 flex items-center justify-center"
+                className="absolute -top-2 -right-2 bg-slate-800 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100 hover:bg-indigo-600 shadow-lg z-30 disabled:bg-amber-500"
                 title="Test Node"
               >
                 {execStatus === "running" ? (
-                  <Loader2 size={10} className="animate-spin" />
+                  <Loader2 size={8} className="animate-spin" />
                 ) : (
-                  <Play size={10} fill="currentColor" />
+                  <Play size={8} fill="currentColor" />
                 )}
               </button>
             )}
@@ -183,6 +190,7 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
           {data.config?.description || config.label}
         </div>
 
+        {/* Handles */}
         {config.category !== "trigger" && (
           <Handle
             type="target"
@@ -234,6 +242,7 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
     );
   }
 
+  // --- VIEW 2: FULL CARD STYLE ---
   return (
     <div
       className={`
@@ -246,11 +255,12 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
       <NodeExecutionStatus nodeId={id} executionData={data.executionData} />
 
       {!isValid && (
-        <div className="absolute -top-3 -right-3 z-20 bg-red-500 text-white p-1 rounded-full shadow-md animate-bounce max-lg:p-1.5">
+        <div className="absolute -top-3 -right-3 z-20 bg-red-500 text-white p-1 rounded-full shadow-md animate-bounce">
           <AlertCircle size={16} />
         </div>
       )}
 
+      {/* Header */}
       <div
         className={`px-4 py-2 rounded-t-lg border-b flex items-center justify-between ${colors.bg} ${isValid ? colors.border : "border-red-100"}`}
       >
@@ -269,7 +279,7 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
             config.category !== "trigger" &&
             config.category !== "logic" && (
               <button
-                className={`p-1 rounded transition-colors ${execStatus === "running" ? "text-amber-500" : "text-slate-500 hover:text-indigo-600 hover:bg-white/50 max-lg:bg-white/50"}`}
+                className={`p-1 rounded transition-colors ${execStatus === "running" ? "text-amber-500" : "text-slate-500 hover:text-indigo-600 hover:bg-white/50"}`}
                 title="Test this node"
                 onClick={onTestClick}
                 disabled={execStatus === "running"}
@@ -289,6 +299,7 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
         </div>
       </div>
 
+      {/* Content */}
       <div className="p-4 bg-white rounded-b-lg relative">
         <div className="flex justify-between items-center mb-2">
           <div className="text-[10px] text-gray-400 font-mono uppercase tracking-wide">
@@ -304,11 +315,12 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
         </div>
       </div>
 
+      {/* Handles */}
       {config.category !== "trigger" && (
         <Handle
           type="target"
           position={Position.Left}
-          className="!w-3 !h-3 !border-2 !border-white transition-transform duration-200 hover:scale-125 max-lg:!w-4 max-lg:!h-4 max-sm:!w-5 max-sm:!h-5"
+          className="!w-3 !h-3 !border-2 !border-white transition-transform duration-200 hover:scale-125"
           style={{ backgroundColor: getHandleColor(config.category), left: -9 }}
         />
       )}
@@ -322,7 +334,7 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
               id="true"
               type="source"
               position={Position.Right}
-              className="!relative !w-3 !h-3 !border-2 !border-white !bg-green-500 hover:scale-125 transition-transform max-lg:!w-4 max-lg:!h-4 max-sm:!w-5 max-sm:!h-5"
+              className="!relative !w-3 !h-3 !border-2 !border-white !bg-green-500 hover:scale-125 transition-transform"
               style={{ top: 0, transform: "none", right: 0 }}
             />
           </div>
@@ -334,7 +346,7 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
               id="false"
               type="source"
               position={Position.Right}
-              className="!relative !w-3 !h-3 !border-2 !border-white !bg-red-500 hover:scale-125 transition-transform max-lg:!w-4 max-lg:!h-4 max-sm:!w-5 max-sm:!h-5"
+              className="!relative !w-3 !h-3 !border-2 !border-white !bg-red-500 hover:scale-125 transition-transform"
               style={{ top: 0, transform: "none", right: 0 }}
             />
           </div>
@@ -343,7 +355,7 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
         <Handle
           type="source"
           position={Position.Right}
-          className="!w-3 !h-3 !border-2 !border-white transition-transform duration-200 hover:scale-125 max-lg:!w-4 max-lg:!h-4 max-sm:!w-5 max-sm:!h-5"
+          className="!w-3 !h-3 !border-2 !border-white transition-transform duration-200 hover:scale-125"
           style={{
             backgroundColor: getHandleColor(config.category),
             right: -9,
