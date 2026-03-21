@@ -11,11 +11,10 @@ export default function SettingsModal({
     initialData || {
       name: "My Workflow",
       spreadsheetId: "",
-      columnMapping: {}, // Format: { "0": "Wallet", "4": "Status" }
+      columnMapping: {},
     },
   );
 
-  // Convert object to array for rendering UI: [{col: "0", var: "Wallet"}]
   const [mappings, setMappings] = useState<{ col: string; var: string }[]>(
     Object.entries(initialData?.columnMapping || {}).map(([k, v]) => ({
       col: k,
@@ -24,7 +23,6 @@ export default function SettingsModal({
   );
 
   const handleSave = () => {
-    // Convert array back to object for storage
     const mapObj = mappings.reduce(
       (acc, item) => {
         if (item.col !== "" && item.var !== "") acc[item.col] = item.var;
@@ -53,10 +51,11 @@ export default function SettingsModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center animate-in fade-in duration-200">
-      <div className="bg-white rounded-xl shadow-2xl w-[500px] flex flex-col max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+      {/* 🟢 MODIFIED: max-sm:w-[95vw] */}
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-[500px] flex flex-col max-h-[90vh] overflow-hidden">
         {/* Header */}
-        <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-slate-50">
+        <div className="p-5 max-sm:p-4 border-b border-gray-100 flex justify-between items-center bg-slate-50">
           <div className="flex items-center gap-2">
             <div className="bg-indigo-100 p-2 rounded-lg text-indigo-600">
               <Columns size={18} />
@@ -68,15 +67,14 @@ export default function SettingsModal({
           </button>
         </div>
 
-        <div className="p-6 space-y-6 overflow-y-auto">
-          {/* General Config */}
+        {/* Body */}
+        <div className="p-6 max-sm:p-4 space-y-6 overflow-y-auto custom-scrollbar">
           <div className="space-y-4">
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 uppercase">
                 Workflow Name
               </label>
               <input
-                // Added text-slate-900 here
                 className="w-full p-2.5 border border-gray-200 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                 value={data.name}
                 onChange={(e) => setData({ ...data, name: e.target.value })}
@@ -88,7 +86,6 @@ export default function SettingsModal({
                 Google Sheet ID
               </label>
               <input
-                // Changed text-slate-600 to text-slate-900
                 className="w-full p-2.5 border border-gray-200 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
                 placeholder="1BxiMVs0XRA5nFMd..."
                 value={data.spreadsheetId}
@@ -102,7 +99,6 @@ export default function SettingsModal({
             </div>
           </div>
 
-          {/* Column Mapper */}
           <div className="border-t border-gray-100 pt-5">
             <div className="flex justify-between items-center mb-4">
               <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2">
@@ -128,12 +124,14 @@ export default function SettingsModal({
               )}
 
               {mappings.map((m, i) => (
-                <div key={i} className="flex gap-3 items-center group">
-                  {/* Column Selector */}
-                  <div className="w-32 shrink-0">
+                // 🟢 MODIFIED: Added max-sm:flex-wrap
+                <div
+                  key={i}
+                  className="flex gap-3 items-center group max-sm:flex-wrap max-sm:bg-slate-50 max-sm:p-3 max-sm:rounded-lg max-sm:border max-sm:border-slate-100"
+                >
+                  <div className="w-32 max-sm:w-full shrink-0">
                     <select
-                      // Added text-slate-900 here
-                      className="w-full p-2 bg-slate-50 border border-gray-200 rounded-lg text-sm text-slate-900 outline-none focus:border-indigo-500"
+                      className="w-full p-2 bg-slate-50 max-sm:bg-white border border-gray-200 rounded-lg text-sm text-slate-900 outline-none focus:border-indigo-500"
                       value={m.col}
                       onChange={(e) => updateMapping(i, "col", e.target.value)}
                     >
@@ -145,26 +143,24 @@ export default function SettingsModal({
                     </select>
                   </div>
 
-                  <div className="text-slate-300">→</div>
+                  <div className="text-slate-300 max-sm:hidden">→</div>
 
-                  {/* Variable Name */}
-                  <div className="flex-1">
+                  <div className="flex-1 max-sm:w-full flex items-center gap-2">
                     <input
-                      // Added text-slate-900 here
                       className="w-full p-2 border border-gray-200 rounded-lg text-sm text-slate-900 outline-none focus:border-indigo-500 placeholder:text-slate-300 font-mono"
                       placeholder="e.g. WalletAddress"
                       value={m.var}
                       onChange={(e) => updateMapping(i, "var", e.target.value)}
                     />
-                  </div>
 
-                  {/* Delete */}
-                  <button
-                    onClick={() => removeMapping(i)}
-                    className="text-slate-300 hover:text-red-500 p-1 transition-colors opacity-0 group-hover:opacity-100"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                    {/* Delete visible on mobile by default, hover on desktop */}
+                    <button
+                      onClick={() => removeMapping(i)}
+                      className="text-slate-300 hover:text-red-500 p-2 transition-colors opacity-0 group-hover:opacity-100 max-sm:opacity-100 shrink-0"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -179,10 +175,10 @@ export default function SettingsModal({
           </div>
         </div>
 
-        <div className="p-5 bg-slate-50 border-t border-gray-100 flex justify-end">
+        <div className="p-5 max-sm:p-4 bg-slate-50 border-t border-gray-100 flex justify-end">
           <button
             onClick={handleSave}
-            className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-700 flex items-center gap-2 shadow-lg shadow-indigo-200 transition-all active:scale-95"
+            className="bg-indigo-600 max-sm:w-full max-sm:justify-center text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-700 flex items-center gap-2 shadow-lg shadow-indigo-200 transition-all active:scale-95"
           >
             <Save size={16} /> Save Configuration
           </button>

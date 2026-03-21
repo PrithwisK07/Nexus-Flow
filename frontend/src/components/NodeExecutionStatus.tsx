@@ -3,24 +3,20 @@ import { ExternalLink, Check, X, Loader2, Terminal, Copy } from "lucide-react";
 import { toast } from "sonner";
 
 export default function NodeExecutionStatus({ nodeId, executionData }: any) {
-  // 1. Default to CLOSED
   const [isOpen, setIsOpen] = useState(false);
 
-  // 2. Smart Auto-Open Logic
   useEffect(() => {
     if (!executionData) return;
 
     const { status, result } = executionData;
     const hasTxHash = !!result?.TX_HASH;
 
-    // Auto-open ONLY if it failed OR if it generated a Transaction Hash
     if (status === "failed" || hasTxHash) {
       setIsOpen(true);
     } else {
-      // Keep it closed for 'running' or normal 'success' without a hash
       setIsOpen(false);
     }
-  }, [executionData]); // Only re-runs when the node updates its execution state
+  }, [executionData]);
 
   if (!executionData) return null;
 
@@ -39,13 +35,12 @@ export default function NodeExecutionStatus({ nodeId, executionData }: any) {
     );
   };
 
-  // --- MINIMIZED (CLOSED) STATE ---
   if (!isOpen) {
     return (
       <div
         onClick={(e) => {
           e.stopPropagation();
-          setIsOpen(true); // User manually opens it by clicking the badge
+          setIsOpen(true);
         }}
         className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 cursor-pointer group animate-in fade-in zoom-in duration-200"
         title="View Execution Details"
@@ -73,24 +68,22 @@ export default function NodeExecutionStatus({ nodeId, executionData }: any) {
     );
   }
 
-  // --- OPEN STATE ---
   return (
     <div
+      // 🟢 MODIFIED: Added max-sm:w-[90vw] max-sm:max-w-[280px] to prevent screen overflow
       className="
         absolute bottom-full left-1/2 -translate-x-1/2 mb-3 
-        w-72 bg-white rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-slate-100 
+        w-72 max-sm:w-[90vw] max-sm:max-w-[280px] bg-white rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-slate-100 
         flex flex-col z-50 
         animate-in fade-in slide-in-from-bottom-3 duration-300 ease-out origin-bottom
       "
       onClick={(e) => e.stopPropagation()}
     >
-      {/* --- HEADER --- */}
       <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-white/95 backdrop-blur-sm rounded-t-xl z-10">
         <div className="flex items-center gap-2">
-          {/* Status Icon Pill */}
           <div
             className={`
-            flex items-center justify-center w-5 h-5 rounded-full
+            flex items-center justify-center w-5 h-5 rounded-full shrink-0
             ${status === "running" ? "bg-amber-100 text-amber-600 animate-pulse" : ""}
             ${status === "success" ? "bg-emerald-100 text-emerald-600" : ""}
             ${status === "failed" ? "bg-rose-100 text-rose-600" : ""}
@@ -103,14 +96,12 @@ export default function NodeExecutionStatus({ nodeId, executionData }: any) {
             {status === "failed" && <X size={10} strokeWidth={3} />}
           </div>
 
-          <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+          <span className="text-xs font-bold text-slate-700 uppercase tracking-wide truncate">
             {status === "running" ? "Processing" : status}
           </span>
         </div>
 
-        {/* Header Actions */}
-        <div className="flex items-center gap-1">
-          {/* Copy Action */}
+        <div className="flex items-center gap-1 shrink-0">
           {(status === "success" || status === "failed") && (
             <button
               onClick={handleCopy}
@@ -121,7 +112,6 @@ export default function NodeExecutionStatus({ nodeId, executionData }: any) {
             </button>
           )}
 
-          {/* Close Action */}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -135,10 +125,9 @@ export default function NodeExecutionStatus({ nodeId, executionData }: any) {
         </div>
       </div>
 
-      {/* --- CONTENT BODY --- */}
       <div className="p-1 bg-white/95 backdrop-blur-sm rounded-b-xl z-10 relative">
         {status === "failed" ? (
-          <div className="m-2 p-3 bg-rose-50 border border-rose-100 rounded-lg font-mono text-[10px]">
+          <div className="m-2 p-3 bg-rose-50 border border-rose-100 rounded-lg font-mono text-[10px] max-sm:text-[9px]">
             <p className="font-bold text-rose-800 mb-1 uppercase tracking-wider">
               Error Output
             </p>
@@ -168,10 +157,11 @@ export default function NodeExecutionStatus({ nodeId, executionData }: any) {
           </a>
         ) : result ? (
           <div className="relative group/code m-2">
-            <div className="absolute top-2 right-2 z-20 opacity-50 group-hover/code:opacity-100 transition-opacity pointer-events-none">
+            <div className="absolute top-2 right-2 z-20 opacity-50 group-hover/code:opacity-100 max-sm:opacity-100 transition-opacity pointer-events-none">
               <Terminal size={10} className="text-slate-400" />
             </div>
-            <div className="max-h-48 overflow-y-auto custom-scrollbar p-3 bg-slate-900 border border-slate-800 text-slate-300 rounded-lg text-[10px] font-mono leading-relaxed shadow-sm">
+            {/* 🟢 MODIFIED: text-[10px] max-sm:text-[8px] for JSON output */}
+            <div className="max-h-48 overflow-y-auto custom-scrollbar p-3 bg-slate-900 border border-slate-800 text-slate-300 rounded-lg text-[10px] max-sm:text-[8px] font-mono leading-relaxed shadow-sm">
               <pre className="whitespace-pre-wrap break-all">
                 {JSON.stringify(result, null, 2)}
               </pre>

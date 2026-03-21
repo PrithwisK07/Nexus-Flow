@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-// --- Sub-component for the live countdown ---
 const ScheduleCountdown = ({ targetTime }: { targetTime: number }) => {
   const [timeLeft, setTimeLeft] = useState<string>("...");
 
@@ -59,7 +58,6 @@ const ScheduleCountdown = ({ targetTime }: { targetTime: number }) => {
   );
 };
 
-// --- Main Modal Component ---
 export default function ActiveSchedulesModal({
   isOpen,
   onClose,
@@ -116,11 +114,11 @@ export default function ActiveSchedulesModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl shadow-2xl w-[700px] max-w-[95vw] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 border border-slate-200/60">
-        {/* Header */}
-        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-          <div className="flex items-center gap-4">
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[700px] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 border border-slate-200/60">
+        {/* 🟢 MODIFIED: max-sm padding */}
+        <div className="px-6 py-5 max-sm:px-4 max-sm:py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+          <div className="flex items-center gap-4 max-sm:gap-3">
             <div className="relative flex items-center justify-center w-10 h-10 bg-white text-indigo-600 rounded-xl border border-slate-200 shadow-sm">
               <Activity size={20} className="text-indigo-500" />
               <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
@@ -129,10 +127,10 @@ export default function ActiveSchedulesModal({
               </span>
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-800 tracking-tight">
+              <h2 className="text-lg font-bold text-slate-800 tracking-tight max-sm:text-base">
                 Active Workflows
               </h2>
-              <p className="text-sm text-slate-500 mt-0.5">
+              <p className="text-sm text-slate-500 mt-0.5 max-sm:text-xs">
                 Monitoring background automated tasks
               </p>
             </div>
@@ -145,8 +143,8 @@ export default function ActiveSchedulesModal({
           </button>
         </div>
 
-        {/* List Body */}
-        <div className="p-6 overflow-y-auto max-h-[65vh] bg-white">
+        {/* 🟢 MODIFIED: max-sm padding */}
+        <div className="p-6 max-sm:p-4 overflow-y-auto max-h-[65vh] bg-white">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-12 text-slate-500">
               <Loader2
@@ -172,23 +170,21 @@ export default function ActiveSchedulesModal({
               {schedules.map((job) => (
                 <div
                   key={job.key}
-                  className="group relative flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-white border border-slate-200 rounded-xl hover:border-indigo-300 hover:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] transition-all duration-200"
+                  className="group relative flex flex-col sm:flex-row sm:items-center justify-between p-4 max-sm:p-3 bg-white border border-slate-200 rounded-xl hover:border-indigo-300 hover:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] transition-all duration-200"
                 >
-                  {/* Left Side: Identity */}
                   <div className="flex items-center gap-4 min-w-0 mb-4 sm:mb-0">
                     <div className="flex-shrink-0 w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100/50">
                       <Zap size={18} />
                     </div>
                     <div className="flex flex-col min-w-0">
                       <h4 className="text-sm font-semibold text-slate-900 truncate">
-                        {/* Fallback to 'Automated Task' if name isn't clearly defined */}
                         {job.name && job.name !== "__default__"
                           ? job.name
                           : "Automated Task"}
                       </h4>
-                      <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
                         {job.id && (
-                          <span className="text-[11px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded truncate max-w-[100px] sm:max-w-[150px]">
+                          <span className="text-[11px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded truncate max-w-[150px]">
                             {job.id}
                           </span>
                         )}
@@ -201,7 +197,6 @@ export default function ActiveSchedulesModal({
                     </div>
                   </div>
 
-                  {/* Right Side: Timing & Actions */}
                   <div className="flex items-center justify-between sm:justify-end gap-4 sm:gap-6 flex-shrink-0 sm:pl-4">
                     <div className="flex flex-col sm:items-end">
                       <ScheduleCountdown targetTime={job.nextRunTimestamp} />
@@ -211,7 +206,6 @@ export default function ActiveSchedulesModal({
                       </span>
                     </div>
 
-                    {/* Divider for desktop */}
                     <div className="hidden sm:block w-px h-8 bg-slate-100"></div>
 
                     <button
