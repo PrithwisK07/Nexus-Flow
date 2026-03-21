@@ -29,12 +29,11 @@ import {
   Zap,
   MessageCircle,
   Ruler,
-  ExternalLink, // <-- Added ExternalLink
+  ExternalLink,
 } from "lucide-react";
 import { NODE_TYPES, CATEGORY_COLORS } from "@/lib/nodeConfig";
 import LogicBuilder from "./LogicBuilder";
 
-// --- Generic Icon Mapper for all Select Options ---
 const getSelectOptionIcon = (opt: string, disabled: boolean = false) => {
   const tokenIcons: Record<string, string> = {
     ETH: "https://cryptologos.cc/logos/ethereum-eth-logo.svg?v=025",
@@ -118,7 +117,6 @@ const getSelectOptionIcon = (opt: string, disabled: boolean = false) => {
   }
 };
 
-// --- Deterministic Gradient Avatar for Addresses ---
 const AddressAvatar = ({
   seed,
   disabled,
@@ -204,7 +202,6 @@ export default function PropertiesPanel({
     updateData(selectedNode.id, { [field]: value });
   };
 
-  // --- Dynamic Form Logic ---
   const isInputDisabled = (inputName: string) => {
     if (inputName === "customTokenIn")
       return currentData["tokenIn"] !== "Custom";
@@ -220,7 +217,6 @@ export default function PropertiesPanel({
     return false;
   };
 
-  // 🟢 NEW: Hide inputs based on related select fields
   const isInputHidden = (inputName: string) => {
     if (type === "timer") {
       const scheduleType = currentData["scheduleType"] || "interval";
@@ -363,8 +359,7 @@ export default function PropertiesPanel({
     .filter((group) => group.variables.length > 0);
 
   return (
-    <div className="w-96 bg-white border-l border-gray-200 h-full flex flex-col shadow-2xl z-30 relative overflow-hidden animate-in slide-in-from-right duration-300">
-      {/* Header */}
+    <div className="w-96 max-lg:absolute max-lg:right-0 max-lg:top-0 max-lg:z-[60] max-sm:inset-0 max-sm:w-full bg-white border-l border-gray-200 h-full flex flex-col shadow-2xl z-30 relative overflow-hidden animate-in slide-in-from-right duration-300">
       <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-slate-50 shrink-0">
         <div className="flex items-center gap-3">
           <div className={`p-2 rounded-lg ${colors.bg}`}>
@@ -382,13 +377,12 @@ export default function PropertiesPanel({
         </div>
         <button
           onClick={onClose}
-          className="text-slate-400 hover:text-slate-600 transition-colors"
+          className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded-full transition-colors"
         >
           <X size={20} />
         </button>
       </div>
 
-      {/* Main Content */}
       <div className="p-6 overflow-y-auto flex-1 space-y-6 pb-32 custom-scrollbar">
         <div className="space-y-4">
           <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
@@ -397,7 +391,6 @@ export default function PropertiesPanel({
 
           {config.inputs &&
             config.inputs.map((input: any) => {
-              // 🟢 Skip rendering if hidden
               if (isInputHidden(input.name)) return null;
 
               const isDisabled = isInputDisabled(input.name);
@@ -590,13 +583,12 @@ export default function PropertiesPanel({
                     </div>
                   )}
 
-                  {/* 🟢 NEW: Quick Presets for Timer Node */}
                   {input.name === "cronExpression" &&
                     !isInputHidden("cronExpression") && (
                       <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
                         {[
                           { label: "Hourly", val: "0 * * * *" },
-                          { label: "Daily (Midnight)", val: "0 0 * * *" },
+                          { label: "Daily", val: "0 0 * * *" },
                           { label: "Weekdays", val: "0 0 * * 1-5" },
                         ].map((p) => (
                           <button
@@ -627,9 +619,9 @@ export default function PropertiesPanel({
                         {[
                           { label: "5m", val: "5" },
                           { label: "15m", val: "15" },
-                          { label: "1 hour", val: "60" },
-                          { label: "12 hours", val: "720" },
-                          { label: "24 hours", val: "1440" },
+                          { label: "1h", val: "60" },
+                          { label: "12h", val: "720" },
+                          { label: "24h", val: "1440" },
                         ].map((p) => (
                           <button
                             key={p.label}
@@ -668,7 +660,6 @@ export default function PropertiesPanel({
         </p>
       </div>
 
-      {/* --- REFINED FULL WIDTH BOTTOM SHEET OVERLAY --- */}
       {pickerConfig && (
         <>
           <div

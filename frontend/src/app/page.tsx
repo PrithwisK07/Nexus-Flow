@@ -36,6 +36,8 @@ import {
   LayoutGrid,
   LayoutList,
   Clock,
+  Menu,
+  X,
 } from "lucide-react";
 
 import NexusNode from "@/components/flow/NexusNode";
@@ -44,7 +46,7 @@ import ContextMenu from "@/components/flow/ContextMenu";
 import LiveLogs from "@/components/LiveLogs";
 import SettingsModal from "@/components/SettingsModal";
 import ActiveSchedulesModal from "@/components/ActiveSchedulesModal";
-import DepositModal from "@/components/DepositModal"; // 🟢 NEW: Import Deposit Modal
+import DepositModal from "@/components/DepositModal";
 import { useUndoRedo } from "@/hooks/useUndoRedo";
 import { useDeployment } from "@/hooks/useDeployment";
 import { NODE_TYPES, CATEGORY_COLORS } from "@/lib/nodeConfig";
@@ -52,7 +54,6 @@ import { FlowContext } from "@/components/flow/FlowContext";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
-// --- SOCKET CONNECTION ---
 const socket = io(API_BASE_URL);
 
 const nodeTypes = { nexusNode: NexusNode };
@@ -110,7 +111,8 @@ function NexusCanvas() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSchedulesOpen, setIsSchedulesOpen] = useState(false);
 
-  // 🟢 NEW: Deposit Modal State
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
   const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
   const [depositData, setDepositData] = useState<any>(null);
 
@@ -119,7 +121,6 @@ function NexusCanvas() {
     spreadsheetId: "",
   });
 
-  // Track active execution
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
 
   const { deploy, hotReload, runNow, isDeploying } = useDeployment();
@@ -130,18 +131,15 @@ function NexusCanvas() {
 
   const { isCompact, toggleCompact } = useContext(FlowContext);
 
-  // --- THE AUTO-SAVE / HOT RELOAD HOOK ---
   useEffect(() => {
     if (activeJobId && hotReload) {
       const timeoutId = setTimeout(() => {
-        console.log("🔄 Silently hot-reloading active workflow...");
         hotReload(globalSettings.name, globalSettings, activeJobId);
       }, 1000);
       return () => clearTimeout(timeoutId);
     }
   }, [nodes, edges, globalSettings, activeJobId, hotReload]);
 
-  // --- 1. REAL-TIME EXECUTION LISTENER ---
   useEffect(() => {
     socket.on("workflow_update", (event) => {
       const { type, nodeId, result, error, jobId, workflowId } = event as any;
@@ -168,7 +166,6 @@ function NexusCanvas() {
         return;
       }
 
-      // --- 🟢 NEW: INTERCEPT ACTIONABLE ERRORS BEFORE UPDATING NODES ---
       if (
         type === "node_failed" &&
         error &&
@@ -180,7 +177,6 @@ function NexusCanvas() {
           const payload = JSON.parse(payloadStr);
 
           if (payload.code === "DEPOSIT_REQUIRED") {
-            // Attach workflow + job identifiers so we can resume correctly
             const extendedPayload = {
               ...payload,
               workflowId: payload.workflowId || workflowId || activeJobId,
@@ -194,7 +190,6 @@ function NexusCanvas() {
           console.error("Failed to parse actionable error payload");
         }
       }
-      // -----------------------------------------------------------------
 
       setNodes((nds) =>
         nds.map((node) => {
@@ -215,7 +210,6 @@ function NexusCanvas() {
               };
             }
             if (type === "node_failed") {
-              // Clean up the error message for the UI if it's an actionable error
               const displayError =
                 typeof error === "string" &&
                 error.startsWith("[ACTION_REQUIRED]")
@@ -283,7 +277,6 @@ function NexusCanvas() {
     };
   }, [setEdges, setNodes, activeJobId]);
 
-  // Undo/Redo Logic
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
@@ -310,7 +303,6 @@ function NexusCanvas() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [undo, redo, nodes, edges, setNodes, setEdges]);
 
-  // --- 2. DEPLOY HANDLER ---
   const handleDeploy = async () => {
     setEdges((eds) =>
       eds.map((e) => ({
@@ -342,7 +334,6 @@ function NexusCanvas() {
       if (returnedJobId) {
         setActiveJobId(returnedJobId);
         socket.emit("subscribe_job", returnedJobId);
-        console.log(`🔌 Subscribed to WebSocket room: ${returnedJobId}`);
         toast.info("Watching execution...", { duration: 2000 });
       }
     } else {
@@ -353,7 +344,6 @@ function NexusCanvas() {
     }
   };
 
-  // --- 3. RUN NOW HANDLER ---
   const handleRunNow = async () => {
     setEdges((eds) =>
       eds.map((e) => ({
@@ -478,6 +468,7 @@ function NexusCanvas() {
         },
       };
       setNodes((nds) => nds.concat(newNode));
+      setIsMobileMenuOpen(false);
     }
   };
 
@@ -591,21 +582,39 @@ function NexusCanvas() {
   };
 
   return (
-    <div className="flex h-screen w-full bg-slate-50 font-sans overflow-hidden">
-      {/* LEFT SIDEBAR */}
-      <div className="w-72 bg-white border-r border-gray-200 flex flex-col z-20 shadow-sm">
-        <div className="p-5 border-b border-gray-100 flex items-center gap-3">
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-indigo-200 shadow-lg shrink-0">
-            <Layers size={20} />
+    <div className="flex h-screen w-full bg-slate-50 font-sans overflow-hidden relative">
+      {/* Mobile/Tablet Backdrop for Sidebar */}
+      {isMobileMenuOpen && (
+        <div
+          className="hidden max-lg:block absolute inset-0 bg-slate-900/50 backdrop-blur-sm z-30"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* LEFT SIDEBAR (Hidden on tablet/mobile by default) */}
+      <div
+        className={`w-72 bg-white border-r border-gray-200 flex flex-col z-40 shadow-sm max-lg:absolute max-lg:inset-y-0 max-lg:left-0 max-lg:transition-transform max-lg:duration-300 ${isMobileMenuOpen ? "max-lg:translate-x-0" : "max-lg:-translate-x-full"}`}
+      >
+        <div className="p-5 border-b border-gray-100 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-indigo-200 shadow-lg shrink-0">
+              <Layers size={20} />
+            </div>
+            <div>
+              <h1 className="font-bold text-lg text-slate-800 tracking-tight">
+                Nexus Flow
+              </h1>
+              <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">
+                Orchestration
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="font-bold text-lg text-slate-800 tracking-tight">
-              Nexus Flow
-            </h1>
-            <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">
-              Orchestration
-            </p>
-          </div>
+          <button
+            className="hidden max-lg:block text-slate-400 hover:text-slate-600"
+            onClick={() => setIsMobileMenuOpen(false)}
+          >
+            <X size={20} />
+          </button>
         </div>
 
         {/* Search Bar */}
@@ -626,7 +635,7 @@ function NexusCanvas() {
         </div>
 
         {/* Node Palette */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
           {["trigger", "web3", "data", "logic", "notify", "ops", "ai"].map(
             (cat) => {
               const categoryNodes = Object.entries(NODE_TYPES).filter(
@@ -680,15 +689,24 @@ function NexusCanvas() {
       </div>
 
       {/* MAIN CANVAS */}
-      <div className="flex-1 flex flex-col relative h-full">
+      <div className="flex-1 flex flex-col relative h-full min-w-0">
         {/* Header */}
-        <div className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 z-10 shrink-0">
-          <div className="flex items-center gap-4">
-            <span className="text-slate-400 text-sm">
+        <div className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 max-lg:px-4 z-10 shrink-0">
+          <div className="flex items-center gap-4 max-lg:gap-2">
+            <button
+              className="hidden max-lg:flex p-1.5 text-slate-500 hover:bg-slate-100 rounded-md"
+              onClick={() => setIsMobileMenuOpen(true)}
+            >
+              <Menu size={20} />
+            </button>
+            <span className="text-slate-400 text-sm max-lg:hidden">
               Workflow /{" "}
               <span className="text-slate-800 font-semibold">
                 {globalSettings.name}
               </span>
+            </span>
+            <span className="hidden max-lg:block text-slate-800 font-semibold text-sm truncate max-w-[150px] max-sm:max-w-[100px]">
+              {globalSettings.name}
             </span>
             <button
               onClick={() => setIsSettingsOpen(true)}
@@ -698,9 +716,8 @@ function NexusCanvas() {
             </button>
           </div>
 
-          <div className="flex gap-3 relative">
-            {/* View Toggle Buttons */}
-            <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 mr-2">
+          <div className="flex gap-3 max-lg:gap-1.5 relative">
+            <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 mr-2 max-lg:mr-0 max-sm:hidden">
               <button
                 onClick={() => isCompact && toggleCompact()}
                 className={`p-1.5 rounded-md transition-all ${
@@ -725,26 +742,26 @@ function NexusCanvas() {
               </button>
             </div>
 
-            {/* Schedules Manager Button */}
             <button
               onClick={() => setIsSchedulesOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 text-slate-600 bg-white border border-slate-200 rounded-lg text-sm font-bold hover:bg-slate-50 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 max-lg:px-2.5 max-lg:py-1.5 text-slate-600 bg-white border border-slate-200 rounded-lg text-sm font-bold hover:bg-slate-50 transition-colors"
+              title="Schedules"
             >
-              <Clock size={16} className="text-indigo-500" /> Schedules
+              <Clock size={16} className="text-indigo-500" />{" "}
+              <span className="max-sm:hidden">Schedules</span>
             </button>
 
-            {/* Run Now Button */}
             <button
-              className="flex items-center gap-2 px-4 py-2 text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg text-sm font-bold hover:bg-indigo-100 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 max-lg:px-2.5 max-lg:py-1.5 text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg text-sm font-bold hover:bg-indigo-100 transition-colors"
               onClick={handleRunNow}
               disabled={isDeploying}
+              title="Run Now"
             >
-              <Play size={16} /> Run Now
+              <Play size={16} /> <span className="max-sm:hidden">Run Now</span>
             </button>
 
-            {/* Deploy Button */}
             <button
-              className={`flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all transform hover:scale-105 ${
+              className={`flex items-center gap-2 px-6 py-2 max-lg:px-3 max-lg:py-1.5 bg-indigo-600 text-white rounded-lg text-sm font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all transform hover:scale-105 ${
                 isDeploying ? "opacity-70 cursor-wait" : ""
               }`}
               onClick={handleDeploy}
@@ -755,7 +772,9 @@ function NexusCanvas() {
               ) : (
                 <Save size={16} />
               )}
-              {isDeploying ? "Deploying..." : "Deploy"}
+              <span className="max-sm:hidden">
+                {isDeploying ? "Deploying..." : "Deploy"}
+              </span>
             </button>
           </div>
         </div>
@@ -780,12 +799,13 @@ function NexusCanvas() {
             fitView
             snapToGrid={true}
             snapGrid={[20, 20]}
+            className="touch-none"
           >
             <Background gap={20} color="#cbd5e1" />
-            <Controls className="!bg-white !border-gray-200 !shadow-lg !rounded-lg" />
+            <Controls className="!bg-white !border-gray-200 !shadow-lg !rounded-lg max-lg:!mb-8" />
 
             <MiniMap
-              className="!bg-white !border-gray-200 !shadow-lg !shadow-slate-400 !rounded-lg"
+              className="!bg-white !border-gray-200 !shadow-lg !shadow-slate-400 !rounded-lg max-sm:!hidden"
               zoomable
               pannable
               nodeColor={(n) => {
@@ -825,7 +845,7 @@ function NexusCanvas() {
         />
       )}
 
-      {/* 🟢 DEPOSIT MODAL */}
+      {/* DEPOSIT MODAL */}
       <DepositModal
         isOpen={isDepositModalOpen}
         onClose={() => setIsDepositModalOpen(false)}
@@ -850,7 +870,6 @@ function NexusCanvas() {
             const newJobId = data.jobId;
             setActiveJobId(newJobId);
             socket.emit("subscribe_job", newJobId);
-            console.log(`🔁 Resumed workflow. Subscribed to room: ${newJobId}`);
             toast.success("Workflow resumed!", { duration: 3000 });
           } catch (err: any) {
             console.error("Resume workflow request failed:", err);
@@ -861,13 +880,11 @@ function NexusCanvas() {
         }}
       />
 
-      {/* ACTIVE SCHEDULES MODAL */}
       <ActiveSchedulesModal
         isOpen={isSchedulesOpen}
         onClose={() => setIsSchedulesOpen(false)}
       />
 
-      {/* SETTINGS MODAL */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}

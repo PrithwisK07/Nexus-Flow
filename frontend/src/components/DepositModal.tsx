@@ -17,30 +17,30 @@ import {
 } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 
-// Helper to shorten the Ethereum address
 const truncateAddress = (address: string) => {
   if (!address) return "";
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 };
 
-export default function DepositModal({ isOpen, onClose, depositData, onResume }: any) {
+export default function DepositModal({
+  isOpen,
+  onClose,
+  depositData,
+  onResume,
+}: any) {
   const { isConnected } = useAccount();
 
-  // Wagmi hooks for sending transactions
   const { sendTransactionAsync, isPending: isSendingETH } =
     useSendTransaction();
   const { writeContractAsync, isPending: isWritingERC20 } = useWriteContract();
 
-  // Track the deposit transaction hash until it's confirmed
   const [pendingHash, setPendingHash] = useState<`0x${string}` | null>(null);
   const [hasResumed, setHasResumed] = useState(false);
 
-  const {
-    isSuccess: isConfirmed,
-    isLoading: isConfirming,
-  } = useWaitForTransactionReceipt({
-    hash: pendingHash ?? undefined,
-  });
+  const { isSuccess: isConfirmed, isLoading: isConfirming } =
+    useWaitForTransactionReceipt({
+      hash: pendingHash ?? undefined,
+    });
 
   const isProcessing = isSendingETH || isWritingERC20 || isConfirming;
 
@@ -49,13 +49,11 @@ export default function DepositModal({ isOpen, onClose, depositData, onResume }:
       let txHash;
 
       if (depositData.isNative) {
-        // Native ETH Transfer using Wagmi
         txHash = await sendTransactionAsync({
           to: depositData.accountAddress as `0x${string}`,
           value: BigInt(depositData.missingAmountRaw),
         });
       } else {
-        // ERC-20 Transfer using Wagmi
         txHash = await writeContractAsync({
           address: depositData.tokenAddress as `0x${string}`,
           abi: parseAbi(["function transfer(address to, uint256 amount)"]),
@@ -83,7 +81,6 @@ export default function DepositModal({ isOpen, onClose, depositData, onResume }:
     }
   };
 
-  // Auto-resume ONLY after the deposit transaction is confirmed on-chain
   useEffect(() => {
     if (!pendingHash || !isConfirmed) return;
 
@@ -92,11 +89,14 @@ export default function DepositModal({ isOpen, onClose, depositData, onResume }:
       duration: 5000,
     });
 
-    // Close modal
     onClose();
 
-    // Trigger resume once per confirmed deposit
-    if (!hasResumed && onResume && depositData?.workflowId && depositData?.jobId) {
+    if (
+      !hasResumed &&
+      onResume &&
+      depositData?.workflowId &&
+      depositData?.jobId
+    ) {
       setHasResumed(true);
       onResume(depositData.workflowId, depositData.jobId);
     }
@@ -112,8 +112,8 @@ export default function DepositModal({ isOpen, onClose, depositData, onResume }:
         className="bg-white rounded-[24px] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.2)] w-full max-w-[400px] overflow-hidden animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header Section */}
-        <div className="pt-6 px-6 pb-4 relative flex flex-col items-center text-center">
+        {/* 🟢 MODIFIED: max-sm padding */}
+        <div className="pt-6 px-6 pb-4 max-sm:pt-5 max-sm:px-5 max-sm:pb-3 relative flex flex-col items-center text-center">
           <button
             onClick={!isProcessing ? onClose : undefined}
             disabled={isProcessing}
@@ -135,16 +135,16 @@ export default function DepositModal({ isOpen, onClose, depositData, onResume }:
           </p>
         </div>
 
-        {/* Deposit Details Card */}
-        <div className="px-6 pb-6">
-          <div className="bg-slate-50 rounded-2xl border border-slate-100 p-5 mb-6">
-            {/* Amount */}
-            <div className="flex flex-col items-center justify-center mb-5 pb-5 border-b border-slate-200/80">
+        {/* 🟢 MODIFIED: max-sm padding */}
+        <div className="px-6 pb-6 max-sm:px-5 max-sm:pb-5">
+          <div className="bg-slate-50 rounded-2xl border border-slate-100 p-5 mb-6 max-sm:p-4 max-sm:mb-5">
+            <div className="flex flex-col items-center justify-center mb-5 pb-5 border-b border-slate-200/80 max-sm:mb-4 max-sm:pb-4">
               <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
                 Amount Required
               </span>
               <div className="flex items-baseline gap-1.5 text-slate-800">
-                <span className="text-3xl font-black tracking-tight">
+                {/* 🟢 MODIFIED: max-sm:text-2xl for big numbers */}
+                <span className="text-3xl max-sm:text-2xl font-black tracking-tight truncate max-w-full">
                   {depositData.missingAmountFormatted}
                 </span>
                 <span className="text-lg font-bold text-slate-500">
@@ -153,22 +153,22 @@ export default function DepositModal({ isOpen, onClose, depositData, onResume }:
               </div>
             </div>
 
-            {/* Destination Address */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm text-slate-500">
                 <ArrowDownToLine size={16} className="text-indigo-400" />
-                <span className="font-medium">To Smart Account</span>
+                <span className="font-medium max-sm:text-xs">
+                  To Smart Account
+                </span>
               </div>
               <div className="flex items-center gap-1.5 bg-white border border-slate-200 px-2.5 py-1 rounded-md shadow-sm">
-                <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
-                <span className="text-xs font-mono font-bold text-slate-700">
+                <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse shrink-0" />
+                <span className="text-xs max-sm:text-[10px] font-mono font-bold text-slate-700 truncate">
                   {truncateAddress(depositData.accountAddress)}
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Action Button Section */}
           <div className="space-y-3">
             {!isConnected ? (
               <div className="w-full flex justify-center [&>div]:w-full [&_button]:!w-full [&_button]:!justify-center">

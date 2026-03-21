@@ -55,7 +55,7 @@ export default function LogicBuilder({
   };
 
   return (
-    <div className="flex flex-col gap-2 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+    <div className="flex flex-col gap-2 p-3 max-sm:p-2 bg-slate-50 border border-slate-200 rounded-lg">
       <div className="flex items-center gap-2">
         <button
           onClick={toggleCombinator}
@@ -69,7 +69,8 @@ export default function LogicBuilder({
         </button>
       </div>
 
-      <div className="flex flex-col gap-2 pl-3 border-l-2 border-slate-200/50 mt-1">
+      {/* 🟢 MODIFIED: Reduced left padding on mobile to prevent nesting overflow */}
+      <div className="flex flex-col gap-2 pl-3 max-sm:pl-1.5 border-l-2 border-slate-200/50 mt-1">
         {value.rules.map((rule, idx) => (
           <div key={idx} className="relative group">
             {"combinator" in rule ? (
@@ -81,13 +82,14 @@ export default function LogicBuilder({
                 />
                 <button
                   onClick={() => removeIndex(idx)}
-                  className="absolute -right-2 -top-2 p-1 bg-white shadow-sm border rounded-full text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute -right-2 -top-2 p-1 bg-white shadow-sm border rounded-full text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 max-lg:opacity-100 transition-opacity"
                 >
                   <Trash2 size={12} />
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-2 bg-white p-2 border border-slate-200 rounded shadow-sm z-10 relative">
+              // 🟢 MODIFIED: Added max-sm:flex-wrap
+              <div className="flex items-center gap-2 max-sm:flex-wrap max-sm:gap-1.5 bg-white p-2 border border-slate-200 rounded shadow-sm z-10 relative">
                 <VariableInput
                   value={(rule as LogicRule).valueA}
                   onChange={(v: string) =>
@@ -98,7 +100,7 @@ export default function LogicBuilder({
                 />
 
                 <select
-                  className="text-xs bg-slate-50 border-none rounded font-bold text-slate-600 focus:ring-0 cursor-pointer w-16"
+                  className="text-xs bg-slate-50 border-none rounded font-bold text-slate-600 focus:ring-0 cursor-pointer w-16 shrink-0"
                   value={(rule as LogicRule).operator}
                   onChange={(e) =>
                     updateIndex(idx, {
@@ -126,7 +128,7 @@ export default function LogicBuilder({
 
                 <button
                   onClick={() => removeIndex(idx)}
-                  className="text-slate-300 hover:text-red-500"
+                  className="text-slate-300 hover:text-red-500 p-1 shrink-0"
                 >
                   <Trash2 size={14} />
                 </button>
@@ -154,14 +156,12 @@ export default function LogicBuilder({
   );
 }
 
-// --- SUB-COMPONENT: CLEANER VARIABLE INPUT ---
 const VariableInput = ({ value, onChange, onOpenPicker, placeholder }: any) => {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const triggerPicker = () => {
     const pos = inputRef.current?.selectionStart || (value || "").length;
 
-    // Call the global picker provided by PropertiesPanel
     onOpenPicker((varName: string, nodeId?: string) => {
       const formatted = nodeId ? `{{${nodeId}.${varName}}}` : `{{${varName}}}`;
       const safeValue = value || "";
@@ -170,7 +170,6 @@ const VariableInput = ({ value, onChange, onOpenPicker, placeholder }: any) => {
       const after = safeValue.slice(pos);
       onChange(`${before}${formatted}${after}`);
 
-      // Re-focus and update cursor after injection
       setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.focus();
@@ -189,7 +188,8 @@ const VariableInput = ({ value, onChange, onOpenPicker, placeholder }: any) => {
   };
 
   return (
-    <div className="relative flex-1 min-w-[100px] group/input">
+    // 🟢 MODIFIED: min-w-[80px] for tighter mobile layouts
+    <div className="relative flex-1 min-w-[100px] max-sm:min-w-[80px] group/input">
       <input
         ref={inputRef}
         type="text"
@@ -206,13 +206,13 @@ const VariableInput = ({ value, onChange, onOpenPicker, placeholder }: any) => {
           triggerPicker();
         }}
         className="absolute right-0 top-1 p-0.5 rounded transition-colors text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
-        title="Insert Variable (Ctrl + Space)"
+        title="Insert Variable"
       >
         <Braces size={12} />
       </button>
 
       {!value && (
-        <div className="absolute right-6 top-1.5 text-[9px] text-slate-300 pointer-events-none opacity-0 group-hover/input:opacity-100 transition-opacity font-sans">
+        <div className="absolute right-6 top-1.5 text-[9px] text-slate-300 pointer-events-none opacity-0 group-hover/input:opacity-100 max-lg:hidden transition-opacity font-sans">
           Ctrl+Space
         </div>
       )}
