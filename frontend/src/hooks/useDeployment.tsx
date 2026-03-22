@@ -50,7 +50,7 @@ export const useDeployment = () => {
         const node = nodes.find((n) => n.id === currentId);
         if (!node) break;
 
-        // B. ADD NODE
+        // B. ADD NODE STUB
         if (!["webhook", "sheets", "timer"].includes(node.data.type)) {
           actions.push({
             id: node.id,
@@ -59,7 +59,7 @@ export const useDeployment = () => {
           });
         }
 
-        // C. FIND OUTGOING
+        // C. FIND OUTGOING - CONDITION (IF/ELSE)
         if (node.data.type === "condition") {
           const trueEdges = edges.filter(
             (e) => e.source === node.id && e.sourceHandle === "true",
@@ -71,7 +71,7 @@ export const useDeployment = () => {
           const trueFlow = buildFlowFromEdges(trueEdges, new Set(visited));
           const falseFlow = buildFlowFromEdges(falseEdges, new Set(visited));
 
-          actions.pop(); // Remove the stub
+          actions.pop(); // Remove the stub added in step B
           actions.push({
             id: node.id,
             type: "condition",
@@ -83,11 +83,45 @@ export const useDeployment = () => {
           return { actions, stoppedAt: null };
         }
 
-        // Standard Nodes
+        // 🟢 NEW: FIND OUTGOING - MULTI-ROUTER (SWITCH)
+        if (node.data.type === "switch_router") {
+          const rawRoutes = node.data.config?.routes || "";
+          // Extract user routes and always append the fallback "default"
+          const routes = [
+            ...rawRoutes
+              .split(",")
+              .map((r: string) => r.trim())
+              .filter((r: string) => r.length > 0),
+            "default",
+          ];
+
+          const routeMap: Record<string, any[]> = {};
+
+          // For every route, find the specific edge connected to that handle ID
+          routes.forEach((route) => {
+            const routeEdges = edges.filter(
+              (e) => e.source === node.id && e.sourceHandle === route,
+            );
+            const flow = buildFlowFromEdges(routeEdges, new Set(visited));
+            routeMap[route] = flow.actions;
+          });
+
+          actions.pop(); // Remove the standard node stub added in step B
+          actions.push({
+            id: node.id,
+            type: "switch_router",
+            inputs: { ...node.data.config },
+            routeMap: routeMap, // Nest the compiled paths inside the routeMap
+          });
+
+          return { actions, stoppedAt: null };
+        }
+
+        // Standard Linear Nodes
         const outgoing = edges.filter((e) => e.source === currentId);
 
         if (outgoing.length === 0) {
-          currentId = undefined; // End
+          currentId = undefined; // End of path
         } else if (outgoing.length === 1) {
           currentId = outgoing[0].target; // Linear continue
         } else {
@@ -101,7 +135,7 @@ export const useDeployment = () => {
             branches: branches.map((b) => b.actions),
           });
 
-          // E. RESUME MAIN CHAIN
+          // E. RESUME MAIN CHAIN (Post-Merge)
           const stopPoints = branches
             .map((b) => b.stoppedAt)
             .filter((id) => id !== null);
@@ -153,7 +187,7 @@ export const useDeployment = () => {
       return buildSegment(outgoingEdges[0].target, visited, false);
     };
 
-    // 3. Build the actions array
+    // 3. Build the actions array starting from the trigger
     const rootResult = buildSegment(triggerNode.id, new Set(), false);
 
     // 4. Return the finalized config object
