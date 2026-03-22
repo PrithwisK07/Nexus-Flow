@@ -24,12 +24,13 @@ import {
   Hash,
   Clock,
   CalendarClock,
-  List,
+  List as ListIcon,
   AlignLeft,
   Zap,
   MessageCircle,
   Ruler,
   ExternalLink,
+  GitFork,
 } from "lucide-react";
 import { NODE_TYPES, CATEGORY_COLORS } from "@/lib/nodeConfig";
 import LogicBuilder from "./LogicBuilder";
@@ -94,7 +95,7 @@ const getSelectOptionIcon = (opt: string, disabled: boolean = false) => {
     case "cron":
       return <CalendarClock {...IconProps} />;
     case "bullet points":
-      return <List {...IconProps} />;
+      return <ListIcon {...IconProps} />;
     case "paragraph":
       return <AlignLeft {...IconProps} />;
     case "tldr":
@@ -201,6 +202,48 @@ export default function PropertiesPanel({
   const handleChange = (field: string, value: any) => {
     updateData(selectedNode.id, { [field]: value });
   };
+
+  // --- NEW: List Handlers ---
+  const handleListChange = (field: string, index: number, newValue: string) => {
+    const currentListStr = currentData[field] || "";
+    const listArray = currentListStr
+      .split(",")
+      .map((s: string) => s.trim())
+      .filter((s: string) => s.length > 0);
+
+    // If editing a new empty row that hasn't been added to the string yet
+    if (index >= listArray.length) {
+      listArray.push(newValue);
+    } else {
+      listArray[index] = newValue;
+    }
+
+    handleChange(field, listArray.join(", "));
+  };
+
+  const handleListRemove = (field: string, index: number) => {
+    const currentListStr = currentData[field] || "";
+    const listArray = currentListStr
+      .split(",")
+      .map((s: string) => s.trim())
+      .filter((s: string) => s.length > 0);
+
+    listArray.splice(index, 1);
+    handleChange(field, listArray.join(", "));
+  };
+
+  const handleListAdd = (field: string) => {
+    const currentListStr = currentData[field] || "";
+    const listArray = currentListStr
+      .split(",")
+      .map((s: string) => s.trim())
+      .filter((s: string) => s.length > 0);
+
+    // Add a placeholder that user will immediately edit
+    listArray.push(`Case_${listArray.length + 1}`);
+    handleChange(field, listArray.join(", "));
+  };
+  // --------------------------
 
   const isInputDisabled = (inputName: string) => {
     if (inputName === "customTokenIn")
@@ -447,6 +490,59 @@ export default function PropertiesPanel({
                         setPickerConfig({ onInsert: callback })
                       }
                     />
+                  ) : input.type === "list" ? (
+                    // --- 🟢 NEW: LIST RENDERER (For Switch Router Routes) ---
+                    <div className="space-y-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                      {(() => {
+                        const currentListStr = currentData[input.name] || "";
+                        const items = currentListStr
+                          .split(",")
+                          .map((s: string) => s.trim())
+                          .filter((s: string) => s.length > 0);
+
+                        return (
+                          <>
+                            {items.map((item: string, idx: number) => (
+                              <div
+                                key={idx}
+                                className="flex gap-2 items-center"
+                              >
+                                <div className="bg-slate-200 text-slate-500 font-bold text-[10px] px-2 py-1.5 rounded flex-shrink-0">
+                                  <GitFork size={12} className="inline mr-1" />
+                                  PATH
+                                </div>
+                                <input
+                                  type="text"
+                                  className="flex-1 py-1.5 px-3 rounded text-sm font-mono border border-slate-200 focus:outline-none focus:border-indigo-500"
+                                  value={item}
+                                  onChange={(e) =>
+                                    handleListChange(
+                                      input.name,
+                                      idx,
+                                      e.target.value,
+                                    )
+                                  }
+                                />
+                                <button
+                                  onClick={() =>
+                                    handleListRemove(input.name, idx)
+                                  }
+                                  className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            ))}
+                            <button
+                              onClick={() => handleListAdd(input.name)}
+                              className="w-full mt-1 py-2 flex justify-center items-center gap-1.5 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded border border-indigo-200 transition-colors"
+                            >
+                              <Plus size={14} /> Add Route
+                            </button>
+                          </>
+                        );
+                      })()}
+                    </div>
                   ) : input.type === "select" ? (
                     <div className="relative">
                       {openSelect === input.name && (

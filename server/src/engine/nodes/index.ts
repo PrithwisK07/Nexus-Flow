@@ -26,6 +26,7 @@ import { getMemory } from "./getMemory.js";
 import { setMemory } from "./setMemory.js";
 import { currentTime } from "./currentTime.js";
 import { aiDecision } from "./aiDecisions.js";
+import { switchRouter } from "./switchRouter.js";
 
 export const NODE_REGISTRY: Record<string, Function> = {
     "transfer": transfer,    
@@ -56,4 +57,5 @@ export const NODE_REGISTRY: Record<string, Function> = {
     "get_memory": getMemory,
     "current_time": currentTime,
     "ai_decision": aiDecision,
+    "switch_router": switchRouter
 };

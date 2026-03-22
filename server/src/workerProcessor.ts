@@ -80,7 +80,7 @@ const executeChain = async (
             continue; 
         }
 
-        // B. CONDITION HANDLING
+        // B. CONDITION HANDLING (If/Else)
         if (action.type === 'condition') {
              console.log(`   ⚖️ Evaluating Logic Rules...`);
 
@@ -124,7 +124,34 @@ const executeChain = async (
              return context; 
         }
 
-        // C. STANDARD NODE EXECUTION
+        // C. SWITCH ROUTER HANDLING (Multi-Path)
+        if (action.type === 'switch_router') {
+             console.log(`   🔀 Evaluating Switch Routes...`);
+             
+             // Run the switch logic to determine the route
+             const nodeExecutor = NODE_REGISTRY['switch_router'];
+             if (!nodeExecutor) throw new Error("switch_router missing from NODE_REGISTRY");
+             
+             const result = await nodeExecutor(action.inputs, context);
+             const routeToFollow = result.MATCHED_ROUTE; // e.g. "BUY" or "default"
+
+             // Notify UI of the decision
+             if (jobId) await emitEvent(jobId, 'node_completed', { nodeId: action.id, result });
+
+             // Look up the nested chain for this specific route
+             const nextChain = action.routeMap ? action.routeMap[routeToFollow] : null;
+
+             if (nextChain && nextChain.length > 0) {
+                 console.log(`      -> Following path: [${routeToFollow}]`);
+                 return await executeChain(nextChain, context, spreadsheetId, jobId);
+             } else {
+                 console.log(`      -> Dead end at [${routeToFollow}]. Continuing main sequence if any.`);
+                 // Return context to allow the outer chain to continue if this was a sub-branch
+                 return context; 
+             }
+        }
+
+        // D. STANDARD NODE EXECUTION
         const nodeExecutor = NODE_REGISTRY[action.type];
         if (!nodeExecutor) {
             const errorMsg = `Unknown Node Type: ${action.type}`;

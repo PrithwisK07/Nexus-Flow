@@ -357,4 +357,13 @@ export const NODE_TYPES: Record<string, any> = {
       { name: 'REASON', desc: 'Why it chose this' }
     ] 
   },
+
+  'switch_router': { 
+    label: 'Switch Router', category: 'logic', icon: GitFork,
+    inputs: [
+      { name: 'value', label: 'Value to Evaluate', type: 'text', placeholder: '{{ai_decision.DECISION}}' },
+      { name: 'routes', label: 'Routes (Comma Separated)', type: 'text', placeholder: 'BUY, SELL, HOLD' } 
+    ],
+    outputs: [] 
+  },
 };

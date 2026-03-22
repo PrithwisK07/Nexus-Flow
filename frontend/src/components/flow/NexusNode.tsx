@@ -1,6 +1,12 @@
-import React, { memo, useMemo } from "react";
-import { Handle, Position, NodeProps, useReactFlow } from "reactflow";
-import { AlertCircle, Play, GitMerge, Loader2 } from "lucide-react";
+import React, { memo, useMemo, useEffect } from "react";
+import {
+  Handle,
+  Position,
+  NodeProps,
+  useReactFlow,
+  useUpdateNodeInternals,
+} from "reactflow";
+import { AlertCircle, Play, GitMerge, Loader2, GitFork } from "lucide-react";
 import { NODE_TYPES, CATEGORY_COLORS } from "@/lib/nodeConfig";
 import { useFlowContext } from "./FlowContext";
 import NodeExecutionStatus from "../NodeExecutionStatus";
@@ -8,6 +14,8 @@ import NodeExecutionStatus from "../NodeExecutionStatus";
 const NexusNode = ({ id, data, selected }: NodeProps) => {
   const { isCompact } = useFlowContext();
   const { setNodes } = useReactFlow();
+
+  const updateNodeInternals = useUpdateNodeInternals();
 
   const API_BASE_URL =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -27,14 +35,26 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
     });
   }, [config.inputs, data.config]);
 
+  const rawRoutes = data.config?.routes || "";
+  const switchRoutes = useMemo(() => {
+    return rawRoutes
+      .split(",")
+      .map((r: string) => r.trim())
+      .filter((r: string) => r.length > 0);
+  }, [rawRoutes]);
+
+  useEffect(() => {
+    if (type === "switch_router") {
+      updateNodeInternals(id);
+    }
+  }, [rawRoutes, id, type, updateNodeInternals]);
+
   const execStatus = data.executionData?.status;
 
-  // --- INDIVIDUAL NODE TESTING LOGIC ---
   const onTestClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (execStatus === "running") return; // Prevent double clicks
+    if (execStatus === "running") return;
 
-    // 1. Instantly show the "Running" spinner popover
     setNodes((nds) =>
       nds.map((n) =>
         n.id === id
@@ -44,7 +64,6 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
     );
 
     try {
-      // 2. Call the backend endpoint
       const response = await fetch(`${API_BASE_URL}/test-node`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -56,7 +75,6 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
 
       const result = await response.json();
 
-      // 3. Update the popover with Success or Failure
       setNodes((nds) =>
         nds.map((n) =>
           n.id === id
@@ -75,7 +93,6 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
         ),
       );
     } catch (error: any) {
-      // Handle network errors
       setNodes((nds) =>
         nds.map((n) =>
           n.id === id
@@ -93,9 +110,8 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
   };
 
   const handleClasses =
-    "w-2 h-2 rounded-full border border-white transition-all duration-200";
+    "w-2 h-2 rounded-full border border-white transition-all duration-200 max-lg:!w-4 max-lg:!h-4 max-sm:!w-5 max-sm:!h-5";
 
-  // --- DYNAMIC EXECUTION STYLES ---
   let execStyles = "";
   if (execStatus === "running") {
     execStyles =
@@ -106,7 +122,6 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
     execStyles = "!ring-4 !ring-red-500/30 !border-red-500 z-20";
   }
 
-  // --- SPECIAL RENDER: MERGE NODE ---
   if (type === "merge") {
     return (
       <div
@@ -126,13 +141,13 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
         <Handle
           type="target"
           position={Position.Left}
-          className="!w-3 !h-3 !border-2 !border-white !bg-indigo-400 hover:scale-125 transition-transform absolute"
+          className="!w-3 !h-3 !border-2 !border-white !bg-indigo-400 hover:scale-125 transition-transform absolute max-lg:!w-4 max-lg:!h-4 max-sm:!w-5 max-sm:!h-5"
           style={{ top: "50%", transform: "translate(-50%, -50%)", left: -9 }}
         />
         <Handle
           type="source"
           position={Position.Right}
-          className="!w-3 !h-3 !border-2 !border-white !bg-indigo-400 hover:scale-125 transition-transform absolute"
+          className="!w-3 !h-3 !border-2 !border-white !bg-indigo-400 hover:scale-125 transition-transform absolute max-lg:!w-4 max-lg:!h-4 max-sm:!w-5 max-sm:!h-5"
           style={{ top: "50%", transform: "translate(50%, -50%)", right: -9 }}
         />
       </div>
@@ -141,103 +156,138 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
 
   // --- VIEW 1: COMPACT ICON STYLE ---
   if (isCompact) {
+    const isSwitch = type === "switch_router";
+
     return (
       <div className="relative group flex flex-col items-center">
         <NodeExecutionStatus nodeId={id} executionData={data.executionData} />
 
         <div
           className={`
-            relative w-12 h-12 flex items-center justify-center rounded-2xl bg-white shadow-sm transition-all duration-300 ease-out z-10
+            relative flex flex-col rounded-2xl bg-white shadow-sm transition-all duration-300 ease-out z-10
+            ${isSwitch ? "min-w-[80px] min-h-[48px] py-1.5 justify-center" : "w-12 h-12 items-center justify-center"}
             ${selected ? "ring-2 ring-indigo-500 ring-offset-2 border-transparent scale-105" : "border border-slate-200 hover:border-indigo-300 hover:shadow-md hover:-translate-y-0.5"}
             ${!isValid ? "!border-red-400" : ""}
             ${execStyles}
           `}
         >
-          <div
-            className={`transition-colors duration-300 ${isValid ? colors.text : "text-red-400"}`}
-          >
-            <Icon size={20} strokeWidth={1.5} />
-          </div>
-
-          {!isValid && (
-            <div className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 border-2 border-white shadow-sm">
-              <AlertCircle size={8} />
+          {!isSwitch && (
+            <div
+              className={`transition-colors duration-300 ${isValid ? colors.text : "text-red-400"}`}
+            >
+              <Icon size={20} strokeWidth={1.5} />
             </div>
           )}
 
-          {/* Hide test button for logic nodes (like condition/merge) */}
+          {!isValid && (
+            <div className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 border-2 border-white shadow-sm z-20">
+              <AlertCircle size={8} className="max-lg:w-3 max-lg:h-3" />
+            </div>
+          )}
+
           {isValid &&
             config.category !== "trigger" &&
             config.category !== "logic" && (
               <button
                 onClick={onTestClick}
                 disabled={execStatus === "running"}
-                className="absolute -top-2 -right-2 bg-slate-800 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100 hover:bg-indigo-600 shadow-lg z-30 disabled:bg-amber-500"
+                className="absolute -top-2 -right-2 bg-slate-800 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 max-lg:opacity-100 transition-all scale-75 group-hover:scale-100 max-lg:scale-100 hover:bg-indigo-600 shadow-lg z-30 disabled:bg-amber-500 max-lg:w-6 max-lg:h-6 flex items-center justify-center"
                 title="Test Node"
               >
                 {execStatus === "running" ? (
-                  <Loader2 size={8} className="animate-spin" />
+                  <Loader2 size={10} className="animate-spin" />
                 ) : (
-                  <Play size={8} fill="currentColor" />
+                  <Play size={10} fill="currentColor" />
                 )}
               </button>
             )}
+
+          {isSwitch && (
+            <div className="flex flex-col w-full relative">
+              {switchRoutes.map((route: string) => (
+                <div
+                  key={route}
+                  className="relative w-full flex items-center pl-3 pr-2 py-1.5 min-h-[24px]"
+                >
+                  <span className="text-[9px] font-bold text-slate-600 font-mono uppercase tracking-wider truncate max-w-[70px] mr-2">
+                    {route}
+                  </span>
+                  <Handle
+                    id={route}
+                    type="source"
+                    position={Position.Right}
+                    // 🟢 Dynamically centered route handles
+                    className="!absolute !top-1/2 !-translate-y-1/2 !-right-[5px] !w-2.5 !h-2.5 max-lg:!w-3.5 max-lg:!h-3.5 !bg-indigo-500 !border-[1.5px] !border-white hover:scale-125 transition-transform shadow-sm m-0"
+                  />
+                </div>
+              ))}
+
+              {switchRoutes.length > 0 && (
+                <div className="w-full h-px bg-slate-100 my-0.5" />
+              )}
+
+              <div className="relative w-full flex items-center pl-3 pr-2 py-1.5 min-h-[24px]">
+                <span className="text-[9px] font-bold text-slate-400 font-mono uppercase tracking-wider mr-2">
+                  DEFAULT
+                </span>
+                <Handle
+                  id="default"
+                  type="source"
+                  position={Position.Right}
+                  className="!absolute !top-1/2 !-translate-y-1/2 !-right-[5px] !w-2.5 !h-2.5 max-lg:!w-3.5 max-lg:!h-3.5 !bg-slate-400 !border-[1.5px] !border-white hover:scale-125 transition-transform shadow-sm m-0"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* 🟢 REVERTED: Target Handle is back to perfectly centered at 50% */}
+          {config.category !== "trigger" && (
+            <Handle
+              type="target"
+              position={Position.Left}
+              className={`${handleClasses} !bg-slate-300 group-hover:!bg-indigo-400`}
+              style={{ left: -5, top: "50%" }}
+            />
+          )}
+
+          {type === "condition" ? (
+            <>
+              <div className="absolute -right-[5px] top-[25%] -translate-y-1/2">
+                <Handle
+                  id="true"
+                  type="source"
+                  position={Position.Right}
+                  className={`${handleClasses} !bg-emerald-400 !relative !transform-none !m-0`}
+                  style={{ right: 0 }}
+                />
+              </div>
+              <div className="absolute -right-[5px] top-[75%] -translate-y-1/2">
+                <Handle
+                  id="false"
+                  type="source"
+                  position={Position.Right}
+                  className={`${handleClasses} !bg-rose-400 !relative !transform-none !m-0`}
+                  style={{ right: 0 }}
+                />
+              </div>
+            </>
+          ) : (
+            !isSwitch && (
+              <Handle
+                type="source"
+                position={Position.Right}
+                className={`${handleClasses} !bg-slate-300 group-hover:!bg-indigo-400`}
+                style={{ right: -5, top: "50%" }}
+              />
+            )
+          )}
         </div>
 
         <div
-          className={`absolute top-14 text-[10px] font-medium text-center whitespace-nowrap px-2 py-0.5 rounded-md transition-all duration-200 ${selected ? "text-indigo-600 bg-indigo-50" : "text-slate-400 group-hover:text-slate-600 group-hover:bg-white/50"}`}
+          className={`absolute top-[100%] mt-2 text-[10px] font-medium text-center whitespace-nowrap px-2 py-0.5 rounded-md transition-all duration-200 ${selected ? "text-indigo-600 bg-indigo-50" : "text-slate-400 group-hover:text-slate-600 group-hover:bg-white/50"}`}
         >
           {data.config?.description || config.label}
         </div>
-
-        {/* Handles */}
-        {config.category !== "trigger" && (
-          <Handle
-            type="target"
-            position={Position.Left}
-            className={`${handleClasses} !bg-slate-300 group-hover:!bg-indigo-400`}
-            style={{ left: -4 }}
-          />
-        )}
-        {type === "condition" ? (
-          <>
-            <div className="absolute -right-[4px] top-[25%]">
-              <Handle
-                id="true"
-                type="source"
-                position={Position.Right}
-                className={`${handleClasses} !bg-emerald-400`}
-                style={{
-                  right: 0,
-                  top: 0,
-                  position: "relative",
-                  transform: "none",
-                }}
-              />
-            </div>
-            <div className="absolute -right-[4px] top-[75%]">
-              <Handle
-                id="false"
-                type="source"
-                position={Position.Right}
-                className={`${handleClasses} !bg-rose-400`}
-                style={{
-                  right: 0,
-                  top: 0,
-                  position: "relative",
-                  transform: "none",
-                }}
-              />
-            </div>
-          </>
-        ) : (
-          <Handle
-            type="source"
-            position={Position.Right}
-            className={`${handleClasses} !bg-slate-300 group-hover:!bg-indigo-400`}
-            style={{ right: -4 }}
-          />
-        )}
       </div>
     );
   }
@@ -255,12 +305,11 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
       <NodeExecutionStatus nodeId={id} executionData={data.executionData} />
 
       {!isValid && (
-        <div className="absolute -top-3 -right-3 z-20 bg-red-500 text-white p-1 rounded-full shadow-md animate-bounce">
+        <div className="absolute -top-3 -right-3 z-20 bg-red-500 text-white p-1 rounded-full shadow-md animate-bounce max-lg:p-1.5">
           <AlertCircle size={16} />
         </div>
       )}
 
-      {/* Header */}
       <div
         className={`px-4 py-2 rounded-t-lg border-b flex items-center justify-between ${colors.bg} ${isValid ? colors.border : "border-red-100"}`}
       >
@@ -279,7 +328,7 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
             config.category !== "trigger" &&
             config.category !== "logic" && (
               <button
-                className={`p-1 rounded transition-colors ${execStatus === "running" ? "text-amber-500" : "text-slate-500 hover:text-indigo-600 hover:bg-white/50"}`}
+                className={`p-1 rounded transition-colors ${execStatus === "running" ? "text-amber-500" : "text-slate-500 hover:text-indigo-600 hover:bg-white/50 max-lg:bg-white/50"}`}
                 title="Test this node"
                 onClick={onTestClick}
                 disabled={execStatus === "running"}
@@ -299,7 +348,6 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
         </div>
       </div>
 
-      {/* Content */}
       <div className="p-4 bg-white rounded-b-lg relative">
         <div className="flex justify-between items-center mb-2">
           <div className="text-[10px] text-gray-400 font-mono uppercase tracking-wide">
@@ -313,52 +361,99 @@ const NexusNode = ({ id, data, selected }: NodeProps) => {
             ? "Missing configuration..."
             : data.config?.description || config.label}
         </div>
+
+        {type === "switch_router" && (
+          <div className="mt-3 flex flex-col gap-1.5 border-t border-slate-100 pt-3">
+            {switchRoutes.length === 0 && (
+              <span className="text-[10px] text-amber-500 flex items-center gap-1">
+                <AlertCircle size={10} /> Add routes in properties
+              </span>
+            )}
+
+            {switchRoutes.map((route: string) => (
+              <div
+                key={route}
+                className="relative flex justify-between items-center bg-slate-50 px-2 py-1.5 rounded group/route"
+              >
+                <span className="text-[10px] font-bold text-slate-600 truncate max-w-[150px]">
+                  <GitFork size={10} className="inline mr-1 text-indigo-400" />
+                  {route}
+                </span>
+                <Handle
+                  type="source"
+                  position={Position.Right}
+                  id={route}
+                  // 🟢 Clean absolute positioning for full card switch routes too
+                  className="!absolute !top-1/2 !-translate-y-1/2 !-right-[10px] !w-3 !h-3 max-lg:!w-4 max-lg:!h-4 max-sm:!w-5 max-sm:!h-5 !bg-indigo-500 !border-2 !border-white hover:scale-125 transition-transform m-0"
+                />
+              </div>
+            ))}
+
+            <div className="relative flex justify-between items-center bg-slate-50 px-2 py-1.5 rounded opacity-70 group/default">
+              <span className="text-[10px] font-bold text-slate-500">
+                DEFAULT
+              </span>
+              <Handle
+                type="source"
+                position={Position.Right}
+                id="default"
+                className="!absolute !top-1/2 !-translate-y-1/2 !-right-[10px] !w-3 !h-3 max-lg:!w-4 max-lg:!h-4 max-sm:!w-5 max-sm:!h-5 !bg-slate-400 !border-2 !border-white hover:scale-125 transition-transform m-0"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Handles */}
+      {/* 🟢 REVERTED: Target Handle is back to perfectly centered at 50% */}
       {config.category !== "trigger" && (
         <Handle
           type="target"
           position={Position.Left}
-          className="!w-3 !h-3 !border-2 !border-white transition-transform duration-200 hover:scale-125"
-          style={{ backgroundColor: getHandleColor(config.category), left: -9 }}
+          className="!w-3 !h-3 !border-2 !border-white transition-transform duration-200 hover:scale-125 max-lg:!w-4 max-lg:!h-4 max-sm:!w-5 max-sm:!h-5"
+          style={{
+            backgroundColor: getHandleColor(config.category),
+            left: -9,
+            top: "50%",
+          }}
         />
       )}
+
       {type === "condition" ? (
         <>
-          <div className="absolute -right-[9px] top-1/2 -translate-y-4 flex items-center group/true">
-            <span className="text-[9px] font-bold text-green-600 mr-2 bg-white/90 px-1 rounded opacity-0 group-hover/true:opacity-100 transition-opacity pointer-events-none">
+          <div className="absolute -right-[9px] top-[25%] -translate-y-1/2">
+            <span className="absolute right-full top-1/2 -translate-y-1/2 text-[9px] font-bold text-green-600 mr-2 bg-white/90 px-1 rounded opacity-0 group-hover/true:opacity-100 transition-opacity pointer-events-none">
               TRUE
             </span>
             <Handle
               id="true"
               type="source"
               position={Position.Right}
-              className="!relative !w-3 !h-3 !border-2 !border-white !bg-green-500 hover:scale-125 transition-transform"
-              style={{ top: 0, transform: "none", right: 0 }}
+              className="!relative !w-3 !h-3 !border-2 !border-white !bg-green-500 hover:scale-125 transition-transform max-lg:!w-4 max-lg:!h-4 max-sm:!w-5 max-sm:!h-5 !m-0"
+              style={{ right: 0 }}
             />
           </div>
-          <div className="absolute -right-[9px] top-1/2 translate-y-4 flex items-center group/false">
-            <span className="text-[9px] font-bold text-red-500 mr-2 bg-white/90 px-1 rounded opacity-0 group-hover/false:opacity-100 transition-opacity pointer-events-none">
+          <div className="absolute -right-[9px] top-[75%] -translate-y-1/2">
+            <span className="absolute right-full top-1/2 -translate-y-1/2 text-[9px] font-bold text-red-500 mr-2 bg-white/90 px-1 rounded opacity-0 group-hover/false:opacity-100 transition-opacity pointer-events-none">
               FALSE
             </span>
             <Handle
               id="false"
               type="source"
               position={Position.Right}
-              className="!relative !w-3 !h-3 !border-2 !border-white !bg-red-500 hover:scale-125 transition-transform"
-              style={{ top: 0, transform: "none", right: 0 }}
+              className="!relative !w-3 !h-3 !border-2 !border-white !bg-red-500 hover:scale-125 transition-transform max-lg:!w-4 max-lg:!h-4 max-sm:!w-5 max-sm:!h-5 !m-0"
+              style={{ right: 0 }}
             />
           </div>
         </>
-      ) : (
+      ) : type === "switch_router" ? null : (
         <Handle
           type="source"
           position={Position.Right}
-          className="!w-3 !h-3 !border-2 !border-white transition-transform duration-200 hover:scale-125"
+          className="!w-3 !h-3 !border-2 !border-white transition-transform duration-200 hover:scale-125 max-lg:!w-4 max-lg:!h-4 max-sm:!w-5 max-sm:!h-5"
           style={{
             backgroundColor: getHandleColor(config.category),
             right: -9,
+            top: "50%",
           }}
         />
       )}
