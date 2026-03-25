@@ -1,6 +1,6 @@
 import { 
   Zap, ArrowRightLeft, Database, Calculator, MessageSquare, Mail, 
-  FileSpreadsheet, Search, Globe, Rss, Fingerprint, 
+  FileSpreadsheet, Search, Globe, Rss, Fingerprint, Layers,
   Variable, FileJson, Calendar, Flame, Send, GitMerge, GitFork, Clock, Wallet, Sparkles, TrendingUp, FileText, Save
 } from 'lucide-react';
 
@@ -365,5 +365,34 @@ export const NODE_TYPES: Record<string, any> = {
       { name: 'routes', label: 'Routes (Comma Separated)', type: 'text', placeholder: 'BUY, SELL, HOLD' } 
     ],
     outputs: [] 
+  },
+
+  // Aave v3
+  'aave_supply': { 
+    label: 'Aave Supply (Deposit)', category: 'web3', icon: Layers,
+    inputs: [
+      { name: 'asset', label: 'Asset to Supply', type: 'select', options: ['USDC', 'WETH'] },
+      { name: 'amount', label: 'Amount', type: 'text', placeholder: '100 or {{node_1.BALANCE}}' },
+    ],
+    outputs: [{ name: 'TX_HASH', desc: 'Transaction Hash' }]
+  },
+
+  'aave_withdraw': { 
+    label: 'Aave Withdraw', category: 'web3', icon: Layers,
+    inputs: [
+      { name: 'asset', label: 'Asset to Withdraw', type: 'select', options: ['USDC', 'WETH'] },
+      { name: 'amount', label: 'Amount', type: 'text', placeholder: 'Type MAX to withdraw all, or a number' },
+    ],
+    outputs: [{ name: 'TX_HASH', desc: 'Transaction Hash' }]
+  },
+  'aave_balance': { 
+    label: 'Read Aave Balance', category: 'web3', icon: Layers,
+    inputs: [
+      { name: 'asset', label: 'Asset', type: 'select', options: ['USDC', 'WETH'] },
+    ],
+    outputs: [
+      { name: 'BALANCE', desc: 'Formatted Balance (includes yield)' },
+      { name: 'RAW_BALANCE', desc: 'Raw Balance (Wei)' }
+    ]
   },
 };
