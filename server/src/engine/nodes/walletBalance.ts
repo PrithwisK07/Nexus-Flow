@@ -1,8 +1,8 @@
 import { createPublicClient, http, parseAbi, formatUnits } from "viem";
-import { sepolia } from "viem/chains"; 
+import { baseSepolia } from "viem/chains";
 import { resolveVariable, type ExecutionContext } from "../variableResolver.js";
 import { Sanitize } from "../utils/inputSanitizer.js";
-import { KNOWN_TOKENS } from "../utils/tokenRegistry.js"; // <-- Make sure this file exists!
+import { KNOWN_TOKENS } from "../utils/tokenRegistry.js"; 
 
 type ActionInput = Record<string, any>;
 
@@ -11,11 +11,11 @@ export const walletBalance = async (inputs: ActionInput, context: ExecutionConte
     const walletAddress = Sanitize.address(resolveVariable(inputs.walletAddress, context));
     const selectedToken = resolveVariable(inputs.token, context) || "ETH"; // Default to ETH
     
-    console.log(`   👛 Executing Wallet Reader: Checking balance for ${walletAddress}...`);
+    console.log(`   👛 Executing Wallet Reader: Checking balance for ${walletAddress} on Base Sepolia...`);
 
     // 2. Setup Viem Client
     const publicClient = createPublicClient({
-        chain: sepolia,
+        chain: baseSepolia, 
         transport: http()
     });
 
@@ -41,7 +41,6 @@ export const walletBalance = async (inputs: ActionInput, context: ExecutionConte
         
         if (!isNative) {
             tokenAddress = Sanitize.address(rawCustom);
-            // Attempt to dynamically fetch decimals from the smart contract!
             try {
                 decimals = await publicClient.readContract({
                     address: tokenAddress as `0x${string}`,
@@ -50,7 +49,6 @@ export const walletBalance = async (inputs: ActionInput, context: ExecutionConte
                 });
             } catch (e) {
                 console.log(`      ⚠️ Could not read decimals from contract, defaulting to 18.`);
-                // Fallback to 18 (or old legacy decimals input if it existed)
                 decimals = inputs.decimals ? Number(resolveVariable(inputs.decimals, context)) : 18;
             }
         }

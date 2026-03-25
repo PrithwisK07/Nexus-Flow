@@ -4,15 +4,14 @@ import React, { useState } from "react";
 import "@rainbow-me/rainbowkit/styles.css";
 import { getDefaultConfig, RainbowKitProvider } from "@rainbow-me/rainbowkit";
 import { WagmiProvider } from "wagmi";
-import { sepolia } from "wagmi/chains";
+import { baseSepolia } from "wagmi/chains";
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 
-// 1. Setup the Wagmi Config
 const config = getDefaultConfig({
   appName: "Nexus Flow",
-  projectId: "YOUR_WALLETCONNECT_PROJECT_ID", // Get a free one at cloud.walletconnect.com
-  chains: [sepolia],
-  ssr: true, // 🟢 VERY IMPORTANT for Next.js App Router
+  projectId: "0cbf768b6a2280e163a092db5701b4a4",
+  chains: [baseSepolia],
+  ssr: true,
 });
 
 export function Providers({ children }: { children: React.ReactNode }) {
