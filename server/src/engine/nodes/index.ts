@@ -26,6 +26,9 @@ import { setMemory } from "./setMemory.js";
 import { currentTime } from "./currentTime.js";
 import { aiDecision } from "./aiDecisions.js";
 import { switchRouter } from "./switchRouter.js";
+import { aaveSupply } from "./aaveSupply.js";
+import { aaveWithdraw } from "./aaveWithdraw.js";
+import { aaveBalance } from "./aaveBalance.js";
 
 export const NODE_REGISTRY: Record<string, Function> = {
     "transfer": transfer,    
@@ -55,5 +58,8 @@ export const NODE_REGISTRY: Record<string, Function> = {
     "get_memory": getMemory,
     "current_time": currentTime,
     "ai_decision": aiDecision,
-    "switch_router": switchRouter
+    "switch_router": switchRouter,
+    "aave_supply": aaveSupply,
+    "aave_withdraw": aaveWithdraw,
+    "aave_balance": aaveBalance
 };
