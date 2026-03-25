@@ -131,6 +131,19 @@ function NexusCanvas() {
 
   const { isCompact, toggleCompact } = useContext(FlowContext);
 
+  // 🟢 NEW: Listen for manual triggers of the Deposit Modal from the error popover
+  useEffect(() => {
+    const handleReopen = () => {
+      setIsDepositModalOpen(true);
+    };
+
+    window.addEventListener("reopen-deposit-modal", handleReopen);
+
+    return () => {
+      window.removeEventListener("reopen-deposit-modal", handleReopen);
+    };
+  }, []);
+
   useEffect(() => {
     if (activeJobId && hotReload) {
       const timeoutId = setTimeout(() => {
@@ -166,14 +179,15 @@ function NexusCanvas() {
         return;
       }
 
+      // 🟢 MODIFIED: More robust string parsing using .includes()
       if (
         type === "node_failed" &&
         error &&
         typeof error === "string" &&
-        error.startsWith("[ACTION_REQUIRED]")
+        error.includes("[ACTION_REQUIRED]")
       ) {
         try {
-          const payloadStr = error.replace("[ACTION_REQUIRED] ", "");
+          const payloadStr = error.split("[ACTION_REQUIRED]")[1].trim();
           const payload = JSON.parse(payloadStr);
 
           if (payload.code === "DEPOSIT_REQUIRED") {
@@ -210,9 +224,9 @@ function NexusCanvas() {
               };
             }
             if (type === "node_failed") {
+              // 🟢 MODIFIED: Match the robust string check for the UI override
               const displayError =
-                typeof error === "string" &&
-                error.startsWith("[ACTION_REQUIRED]")
+                typeof error === "string" && error.includes("[ACTION_REQUIRED]")
                   ? "Insufficient Funds (See popup)"
                   : error;
 

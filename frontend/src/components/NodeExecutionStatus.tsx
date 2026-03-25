@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { ExternalLink, Check, X, Loader2, Terminal, Copy } from "lucide-react";
+import { ExternalLink, Check, X, Loader2, Terminal, Copy, Wallet } from "lucide-react";
 import { toast } from "sonner";
 
 export default function NodeExecutionStatus({ nodeId, executionData }: any) {
@@ -23,6 +23,26 @@ export default function NodeExecutionStatus({ nodeId, executionData }: any) {
   const { status, result, error } = executionData;
   const link = result?.EXPLORER_LINK;
   const hash = result?.TX_HASH;
+
+  // --- 🟢 NEW: CHECK FOR THE CLEANED ERROR MESSAGE ---
+  let displayError = error;
+  let isDepositError = false;
+
+  if (error === "Insufficient Funds (See popup)") {
+    isDepositError = true;
+  } else if (error && typeof error === 'string' && error.includes('[ACTION_REQUIRED]')) {
+    try {
+      const payloadStr = error.split('[ACTION_REQUIRED]')[1].trim();
+      const parsedAction = JSON.parse(payloadStr);
+      if (parsedAction.code === 'DEPOSIT_REQUIRED') {
+        isDepositError = true;
+        displayError = `Insufficient ${parsedAction.tokenSymbol} balance. Missing: ${parsedAction.missingAmountFormatted}`;
+      }
+    } catch (e) {
+      console.error("Failed to parse actionable error", e);
+    }
+  }
+  // --------------------------------------------------
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -70,7 +90,6 @@ export default function NodeExecutionStatus({ nodeId, executionData }: any) {
 
   return (
     <div
-      // 🟢 MODIFIED: Added max-sm:w-[90vw] max-sm:max-w-[280px] to prevent screen overflow
       className="
         absolute bottom-full left-1/2 -translate-x-1/2 mb-3 
         w-72 max-sm:w-[90vw] max-sm:max-w-[280px] bg-white rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-slate-100 
@@ -129,11 +148,25 @@ export default function NodeExecutionStatus({ nodeId, executionData }: any) {
         {status === "failed" ? (
           <div className="m-2 p-3 bg-rose-50 border border-rose-100 rounded-lg font-mono text-[10px] max-sm:text-[9px]">
             <p className="font-bold text-rose-800 mb-1 uppercase tracking-wider">
-              Error Output
+              {isDepositError ? "Action Required" : "Error Output"}
             </p>
             <p className="text-rose-600 leading-relaxed break-words whitespace-pre-wrap">
-              {error || "Unknown error occurred."}
+              {displayError || "Unknown error occurred."}
             </p>
+            
+            {/* 🟢 NEW: RENDER MANUAL DEPOSIT BUTTON */}
+            {isDepositError && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Dispatch a simple event to tell Canvas to reopen the modal!
+                  window.dispatchEvent(new CustomEvent('reopen-deposit-modal'));
+                }}
+                className="mt-3 w-full py-2 flex items-center justify-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-md font-sans font-bold transition-colors shadow-sm"
+              >
+                <Wallet size={12} /> Resolve: Deposit Funds
+              </button>
+            )}
           </div>
         ) : link ? (
           <a
@@ -160,7 +193,6 @@ export default function NodeExecutionStatus({ nodeId, executionData }: any) {
             <div className="absolute top-2 right-2 z-20 opacity-50 group-hover/code:opacity-100 max-sm:opacity-100 transition-opacity pointer-events-none">
               <Terminal size={10} className="text-slate-400" />
             </div>
-            {/* 🟢 MODIFIED: text-[10px] max-sm:text-[8px] for JSON output */}
             <div className="max-h-48 overflow-y-auto custom-scrollbar p-3 bg-slate-900 border border-slate-800 text-slate-300 rounded-lg text-[10px] max-sm:text-[8px] font-mono leading-relaxed shadow-sm">
               <pre className="whitespace-pre-wrap break-all">
                 {JSON.stringify(result, null, 2)}

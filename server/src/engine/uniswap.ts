@@ -1,6 +1,6 @@
 import { encodeFunctionData } from "viem";
 
-export const UNISWAP_ROUTER = "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E";
+export const UNISWAP_ROUTER = "0x2626664c2603336E57B271c5C0b26F421741e481";
 
 const exactInputSingleABI = [
   {
@@ -33,6 +33,7 @@ export const encodeSwap = (
     amountIn: bigint,
     recipient: string
 ) => {
+    
     const poolFee = 3000; 
 
     const data = encodeFunctionData({
