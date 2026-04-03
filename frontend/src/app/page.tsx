@@ -160,6 +160,15 @@ function NexusCanvas() {
     socket.on("workflow_update", (event) => {
       const { type, nodeId, result, error, jobId, workflowId } = event as any;
 
+      if (type === 'twilio_call_dispatched') {
+         toast('Incoming Call', {
+            description: 'The agent is calling your registered phone number.',
+            icon: '📞',
+            duration: 6000,
+            style: { background: '#1e1e2f', color: '#fff', border: '1px solid #4f46e5' }
+         });
+      }
+
       if (type === "workflow_run_started") {
         setNodes((nds) =>
           nds.map((n) => ({

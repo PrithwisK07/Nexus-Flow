@@ -5,6 +5,7 @@ import { NODE_REGISTRY } from './engine/nodes/index.js';
 import { evaluateRuleGroup, type RuleGroup, type LogicRule } from './engine/logic.js';
 import { redisPublisher } from './config/redisPublisher.js';
 import { redisConnection } from './config/redis.js'; 
+import { dispatchVoiceAlert } from './engine/utils/twilioService.js';
 
 // --- HELPER: REAL-TIME REPORTER ---
 // Sends status updates to Redis -> API -> Frontend (Socket)
@@ -154,16 +155,12 @@ export const executeChain = async (
         // D. STANDARD NODE EXECUTION
         let nodeExecutor = NODE_REGISTRY[action.type];
         
-        if (!nodeExecutor) {
-            const errorMsg = `Unknown Node Type: ${action.type}`;
-            console.error(`   ❌ Critical: ${errorMsg}`);
-            if (jobId) await emitEvent(jobId, 'node_failed', { nodeId: action.id, error: errorMsg });
-            
-            // 🟢 CRITICAL: Throw the error so the engine officially stops and pauses!
-            throw new Error(errorMsg); 
-        }
-
         try {
+            // We moved this inside the try/catch so missing nodes trigger a phone call too!
+            if (!nodeExecutor) {
+                throw new Error(`Unknown Node Type: ${action.type}`);
+            }
+
             // 🟢 FIX 1: Inject _nodeId so the iterator knows its own identity
             const inputs = { ...action.inputs, spreadsheetId, _nodeId: action.id };
             const result = await nodeExecutor(inputs, context);
@@ -186,6 +183,7 @@ export const executeChain = async (
             const isActionRequired = typeof errorMessage === 'string' && errorMessage.startsWith('[ACTION_REQUIRED]');
             const isDepositRequired = isActionRequired && errorMessage.includes('"DEPOSIT_REQUIRED"');
 
+            // --- 🟢 PAUSE STATE HANDLING (For Deposits) ---
             if (isDepositRequired && jobId) {
                 try {
                     const workflowId = context.SYSTEM_WORKFLOW_ID as string | undefined;
@@ -216,7 +214,38 @@ export const executeChain = async (
                 }
             }
 
-            // 3. NOTIFY: Node Failed (includes actionable errors for the UI)
+            // --- 🟢 TWILIO AUTOMATED VOICE ALERT (For ALL Errors) ---
+            const currentWorkflowId = context.SYSTEM_WORKFLOW_ID as string | undefined;
+            if (currentWorkflowId) {
+                let spokenAlert = "";
+
+                if (isDepositRequired) {
+                    try {
+                        const payloadStr = errorMessage.split('[ACTION_REQUIRED]')[1]!.trim();
+                        const parsedAction = JSON.parse(payloadStr);
+                        spokenAlert = `Insufficient funds detected. You need to deposit ${parsedAction.missingAmountFormatted} ${parsedAction.tokenSymbol}.`;
+                    } catch (e) {
+                        spokenAlert = "Insufficient funds detected on a Web 3 node.";
+                    }
+                } else {
+                    // Clean up the error message for Twilio's Text-to-Speech
+                    // We remove JSON brackets, special symbols, and cap it at 120 characters
+                    const cleanError = errorMessage.replace(/[^a-zA-Z0-9 .,!?]/g, ' ').substring(0, 120);
+                    const cleanNodeType = action.type ? action.type.replace('_', ' ') : 'unknown';
+                    spokenAlert = `A critical error occurred at the ${cleanNodeType} node. The system reported: ${cleanError}.`;
+                }
+
+                // Fire async so it doesn't block the worker teardown sequence
+                dispatchVoiceAlert(currentWorkflowId, spokenAlert).catch(e => console.error("Twilio Dispatch Error:", e));
+            
+                if (jobId) {
+                    await emitEvent(jobId, 'twilio_call_dispatched', { 
+                        message: "Automated phone call dispatched to owner." 
+                    });
+                }
+            }
+
+            // --- 3. NOTIFY: Node Failed (includes actionable errors for the UI) ---
             if (jobId) {
                 await emitEvent(jobId, 'node_failed', { 
                     nodeId: action.id, 
