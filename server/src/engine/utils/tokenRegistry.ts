@@ -16,6 +16,31 @@ export const KNOWN_TOKENS: Record<string, { address: string, decimals: number, i
         decimals: 6,  
         isNative: false 
     },
+
+    "DAI":  { 
+        address: "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb", 
+        decimals: 18, 
+        isNative: false 
+    },
+
+    "LINK": { 
+        address: "0xE4aB69C077896252FAFBD49EFD26B5D171A32410", 
+        decimals: 18, 
+        isNative: false 
+    },
+
+    "UNI":  { 
+        address: "0x8a914Bdb492F0eCEca7461C4CbfDbd76Bf1ba9a3", 
+        decimals: 18, 
+        isNative: false 
+    },
+
+    "PEPE": { 
+        // Note: Using a placeholder address since official PEPE isn't natively deployed on Base Sepolia
+        address: "0x3456789012345678901234567890123456789012", 
+        decimals: 18, 
+        isNative: false 
+    }
 };
 
 export const AAVE_V3_BASE_SEPOLIA = {
@@ -30,5 +55,13 @@ export const AAVE_V3_BASE_SEPOLIA = {
             address: KNOWN_TOKENS["USDC"]!.address, 
             decimals: KNOWN_TOKENS["USDC"]!.decimals 
         },
+        "DAI": { 
+            address: KNOWN_TOKENS["DAI"]!.address, 
+            decimals: KNOWN_TOKENS["DAI"]!.decimals 
+        },
+        "LINK": { 
+            address: KNOWN_TOKENS["LINK"]!.address, 
+            decimals: KNOWN_TOKENS["LINK"]!.decimals 
+        }
     }
 };

@@ -1,30 +1,34 @@
 import { resolveVariable, type ExecutionContext } from "../variableResolver.js";
 import { createNexusAccount } from "../smartAccount.js";
 import { Sanitize } from "../utils/inputSanitizer.js";
-import { KNOWN_TOKENS } from "../utils/tokenRegistry.js";
+import { resolveTokenDetails } from "../utils/tokenUtils.js"; // 🟢 Added the Universal Token Resolver
 import { createPublicClient, http, parseAbi, encodeFunctionData, parseUnits, formatUnits } from "viem";
 import { baseSepolia } from "viem/chains"; 
 
 type ActionInput = Record<string, any>;
 
 export const transfer = async (inputs: ActionInput, context: ExecutionContext) => {
-    const toRaw = resolveVariable(inputs.toAddress, context);
+    // 🟢 Updated to match the new frontend input names with fallbacks for older configurations
+    const toRaw = resolveVariable(inputs.recipient, context) || resolveVariable(inputs.toAddress, context);
     const toAddress = Sanitize.address(toRaw);
     const rawAmt = resolveVariable(inputs.amount, context);
     const amount = Sanitize.number(rawAmt);
-    const selectedToken = resolveVariable(inputs.currency, context);
+    
+    // 🟢 Resolve the token inputs
+    const selectedToken = resolveVariable(inputs.token, context) || resolveVariable(inputs.currency, context) || "ETH";
+    const customTokenRaw = resolveVariable(inputs.customToken, context);
 
     if (!toAddress || !toAddress.startsWith("0x")) {
         throw new Error(`Invalid Destination Address: ${toRaw}`);
     }
 
-    const tokenConfig = KNOWN_TOKENS[selectedToken] || {
-        address: resolveVariable(inputs.customToken, context),
-        decimals: 18, 
-        isNative: false
-    };
+    // 🟢 Initialize public client early so we can pass it to the token resolver
+    const publicClient = createPublicClient({ chain: baseSepolia, transport: http() });
 
-    const tokenAddress = Sanitize.address(tokenConfig.address);
+    // 🟢 THE MAGIC: Dynamically resolve known tokens or fetch custom token decimals from the blockchain!
+    const tokenConfig = await resolveTokenDetails(selectedToken, customTokenRaw, publicClient);
+    
+    const tokenAddress = tokenConfig.address as `0x${string}`;
     const amountBigInt = parseUnits(amount.toString(), tokenConfig.decimals);
 
     console.log(`   ➡️ Executing Transfer Node: Sending ${amount} ${selectedToken} to ${toAddress} on Base Sepolia...`);
@@ -33,8 +37,6 @@ export const transfer = async (inputs: ActionInput, context: ExecutionContext) =
     const accountAddress = nexusClient.account.address;
 
     console.log(`      -> Verifying ${selectedToken} balance for ${accountAddress}...`);
-    
-    const publicClient = createPublicClient({ chain: baseSepolia, transport: http() });
 
     let balance: bigint;
     if (tokenConfig.isNative) {
@@ -42,7 +44,7 @@ export const transfer = async (inputs: ActionInput, context: ExecutionContext) =
     } else {
         const erc20Abi = parseAbi(["function balanceOf(address owner) view returns (uint256)"]);
         balance = await publicClient.readContract({
-            address: tokenAddress as `0x${string}`,
+            address: tokenAddress,
             abi: erc20Abi,
             functionName: "balanceOf",
             args: [accountAddress as `0x${string}`]
@@ -54,7 +56,7 @@ export const transfer = async (inputs: ActionInput, context: ExecutionContext) =
         
         const errorPayload = {
             code: "DEPOSIT_REQUIRED",
-            tokenSymbol: selectedToken,
+            tokenSymbol: selectedToken === "Custom" ? "Custom Token" : selectedToken,
             tokenAddress: tokenAddress,
             isNative: tokenConfig.isNative,
             missingAmountRaw: missingAmountBigInt.toString(), 
@@ -65,19 +67,20 @@ export const transfer = async (inputs: ActionInput, context: ExecutionContext) =
 
         throw new Error(`[ACTION_REQUIRED] ${JSON.stringify(errorPayload)}`);
     }
+    
     console.log(`      -> Balance verified! Building transaction...`);
 
     const calls: any[] = [];
 
     if (tokenConfig.isNative) {
-        
+        // Native ETH Transfer
         calls.push({
             to: toAddress as `0x${string}`,
             value: amountBigInt,
             data: "0x"
         });
     } else {
-        
+        // ERC-20 Transfer
         const erc20Abi = parseAbi(["function transfer(address to, uint256 amount)"]);
         const transferData = encodeFunctionData({
             abi: erc20Abi,
@@ -86,7 +89,7 @@ export const transfer = async (inputs: ActionInput, context: ExecutionContext) =
         });
 
         calls.push({
-            to: tokenAddress as `0x${string}`,
+            to: tokenAddress,
             value: 0n,
             data: transferData
         });
