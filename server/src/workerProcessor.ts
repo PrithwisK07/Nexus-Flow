@@ -36,7 +36,7 @@ const resolveRuleGroup = (group: RuleGroup, context: ExecutionContext): RuleGrou
 };
 
 // --- RECURSIVE EXECUTOR ---
-const executeChain = async (
+export const executeChain = async (
     actions: any[], 
     context: ExecutionContext, 
     spreadsheetId?: string, 
@@ -152,16 +152,20 @@ const executeChain = async (
         }
 
         // D. STANDARD NODE EXECUTION
-        const nodeExecutor = NODE_REGISTRY[action.type];
+        let nodeExecutor = NODE_REGISTRY[action.type];
+        
         if (!nodeExecutor) {
             const errorMsg = `Unknown Node Type: ${action.type}`;
             console.error(`   ❌ Critical: ${errorMsg}`);
             if (jobId) await emitEvent(jobId, 'node_failed', { nodeId: action.id, error: errorMsg });
-            break;
+            
+            // 🟢 CRITICAL: Throw the error so the engine officially stops and pauses!
+            throw new Error(errorMsg); 
         }
 
         try {
-            const inputs = { ...action.inputs, spreadsheetId };
+            // 🟢 FIX 1: Inject _nodeId so the iterator knows its own identity
+            const inputs = { ...action.inputs, spreadsheetId, _nodeId: action.id };
             const result = await nodeExecutor(inputs, context);
             
             if (result) {
@@ -289,9 +293,11 @@ export default async function workerProcessor(job: Job) {
 
         for (const item of itemsToProcess) {
             
-            const context = { 
+            const context: any = { 
                 ...item.initialContext,
-                SYSTEM_WORKFLOW_ID: workflowId 
+                SYSTEM_WORKFLOW_ID: workflowId,
+                SYSTEM_JOB_ID: eventRoomId,
+                _engine: executeChain 
             };
             
             if (item.row.length > 0) {

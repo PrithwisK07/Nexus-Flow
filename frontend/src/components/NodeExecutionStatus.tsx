@@ -24,7 +24,7 @@ export default function NodeExecutionStatus({ nodeId, executionData }: any) {
   const link = result?.EXPLORER_LINK;
   const hash = result?.TX_HASH;
 
-  // --- 🟢 NEW: CHECK FOR THE CLEANED ERROR MESSAGE ---
+  // --- 🟢 CHECK FOR THE CLEANED ERROR MESSAGE ---
   let displayError = error;
   let isDepositError = false;
 
@@ -42,16 +42,24 @@ export default function NodeExecutionStatus({ nodeId, executionData }: any) {
       console.error("Failed to parse actionable error", e);
     }
   }
+
+  // 🟢 NEW: Truncate massively long errors for the UI (prevents layout breaking)
+  const MAX_ERROR_LENGTH = 120;
+  const isTruncated = typeof displayError === 'string' && displayError.length > MAX_ERROR_LENGTH;
+  const shortError = isTruncated 
+    ? displayError.substring(0, MAX_ERROR_LENGTH) + "..." 
+    : displayError;
   // --------------------------------------------------
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!result && !error) return;
 
-    const textToCopy = error ? error : JSON.stringify(result, null, 2);
+    // Notice how this still copies the FULL original `error`, not the truncated one!
+    const textToCopy = error ? (typeof error === 'string' ? error : JSON.stringify(error, null, 2)) : JSON.stringify(result, null, 2);
     navigator.clipboard.writeText(textToCopy);
     toast.success(
-      error ? "Error details copied" : "Result copied to clipboard",
+      error ? "Full error details copied" : "Result copied to clipboard",
     );
   };
 
@@ -125,7 +133,7 @@ export default function NodeExecutionStatus({ nodeId, executionData }: any) {
             <button
               onClick={handleCopy}
               className="text-slate-400 hover:text-indigo-600 transition-colors p-1 hover:bg-slate-50 rounded"
-              title="Copy output"
+              title="Copy full output"
             >
               <Copy size={12} />
             </button>
@@ -147,19 +155,25 @@ export default function NodeExecutionStatus({ nodeId, executionData }: any) {
       <div className="p-1 bg-white/95 backdrop-blur-sm rounded-b-xl z-10 relative">
         {status === "failed" ? (
           <div className="m-2 p-3 bg-rose-50 border border-rose-100 rounded-lg font-mono text-[10px] max-sm:text-[9px]">
-            <p className="font-bold text-rose-800 mb-1 uppercase tracking-wider">
-              {isDepositError ? "Action Required" : "Error Output"}
+            <p className="font-bold text-rose-800 mb-1 uppercase tracking-wider flex items-center justify-between">
+              <span>{isDepositError ? "Action Required" : "Error Output"}</span>
             </p>
-            <p className="text-rose-600 leading-relaxed break-words whitespace-pre-wrap">
-              {displayError || "Unknown error occurred."}
+            <p className="text-rose-600 leading-relaxed break-words whitespace-pre-wrap mt-1">
+              {shortError || "Unknown error occurred."}
             </p>
             
-            {/* 🟢 NEW: RENDER MANUAL DEPOSIT BUTTON */}
+            {/* 🟢 NEW: Helpful hint if truncated */}
+            {isTruncated && (
+              <p className="text-[9px] text-rose-400 mt-2 font-sans italic">
+                (Message truncated. Use the Copy icon above to view the full error logs)
+              </p>
+            )}
+            
+            {/* RENDER MANUAL DEPOSIT BUTTON */}
             {isDepositError && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  // Dispatch a simple event to tell Canvas to reopen the modal!
                   window.dispatchEvent(new CustomEvent('reopen-deposit-modal'));
                 }}
                 className="mt-3 w-full py-2 flex items-center justify-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-md font-sans font-bold transition-colors shadow-sm"

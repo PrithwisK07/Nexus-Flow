@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import Image from "next/image";
 import {
   X,
   Settings,
@@ -37,23 +38,26 @@ import LogicBuilder from "./LogicBuilder";
 
 const getSelectOptionIcon = (opt: string, disabled: boolean = false) => {
   const tokenIcons: Record<string, string> = {
-    ETH: "https://cryptologos.cc/logos/ethereum-eth-logo.svg?v=025",
-    USDC: "https://cryptologos.cc/logos/usd-coin-usdc-logo.svg?v=025",
-    WETH: "https://cryptologos.cc/logos/ethereum-eth-logo.svg?v=025",
-    UNI: "https://cryptologos.cc/logos/uniswap-uni-logo.svg?v=025",
-    LINK: "https://cryptologos.cc/logos/chainlink-link-logo.svg?v=025",
+    ETH: "/icons/ethereum-eth-logo.svg",
+    USDC: "/icons/usd-coin-usdc-logo.svg",
+    WETH: "/icons/weth.png",
+    UNI: "/icons/uniswap-uni-logo.svg",
+    LINK: "/icons/chainlink-link-logo.svg",
   };
 
   const opacityClass = disabled ? "opacity-40 grayscale" : "";
 
   if (tokenIcons[opt]) {
     return (
-      <img
-        src={tokenIcons[opt]}
-        alt={opt}
-        className={`rounded-full shadow-sm ${opacityClass}`}
-        style={{ width: "18px", height: "18px" }}
-      />
+      <div className={`w-4 h-4 flex items-center justify-center ${opacityClass}`}>
+        <Image
+          src={tokenIcons[opt]}
+          alt={opt}
+          width={opt == "ETH" ? 13 : 20}
+          height={opt == "ETH" ? 13 : 20}
+          className="object-contain"
+        />
+      </div>
     );
   }
 
@@ -179,6 +183,9 @@ export default function PropertiesPanel({
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [openSelect, setOpenSelect] = useState<string | null>(null);
+  
+  const [savedWorkflows, setSavedWorkflows] = useState<any[]>([]);
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
   const inputRefs = useRef<
     Record<string, HTMLInputElement | HTMLTextAreaElement>
@@ -198,6 +205,17 @@ export default function PropertiesPanel({
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
   }, [pickerConfig]);
+
+  useEffect(() => {
+    if (config.inputs?.some((i: any) => i.type === 'workflow-select')) {
+      fetch(`${API_BASE_URL}/api/workflows`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) setSavedWorkflows(data.workflows);
+        })
+        .catch(console.error);
+    }
+  }, [config.inputs, API_BASE_URL]);
 
   const handleChange = (field: string, value: any) => {
     updateData(selectedNode.id, { [field]: value });
@@ -353,19 +371,26 @@ export default function PropertiesPanel({
         nodeConfig.outputs.forEach((out: any) => {
           const groupLabel = node.data.label || nodeConfig.label;
 
+          // 🟢 FIX: Lenient Pseudo-JSON Parser using Regex
           if (out.name === "dynamic" && out.sourceField === "schema") {
             const schemaText = node.data.config?.[out.sourceField];
             if (schemaText) {
-              try {
-                const parsedSchema = JSON.parse(schemaText);
-                Object.keys(parsedSchema).forEach((key) => {
-                  addVarToGroup(node.id, groupLabel, "node", {
-                    name: key,
-                    nodeId: node.id,
-                    desc: `AI Output (${parsedSchema[key]})`,
-                  });
+              // Regex looks for words immediately preceding a colon (e.g. key:, "key":, 'key':)
+              const regex = /['"]?([a-zA-Z0-9_]+)['"]?\s*:/g;
+              let match;
+              const extractedKeys = new Set<string>();
+              
+              while ((match = regex.exec(schemaText)) !== null) {
+                extractedKeys.add(match[1]); // match[1] captures the key name cleanly
+              }
+
+              extractedKeys.forEach((key) => {
+                addVarToGroup(node.id, groupLabel, "node", {
+                  name: key,
+                  nodeId: node.id,
+                  desc: `AI Output (${key})`,
                 });
-              } catch (e) {}
+              });
             }
             return;
           }
@@ -402,7 +427,7 @@ export default function PropertiesPanel({
     .filter((group) => group.variables.length > 0);
 
   return (
-    <div className="w-96 max-lg:absolute max-lg:right-0 max-lg:top-0 max-lg:z-[60] max-sm:inset-0 max-sm:w-full bg-white border-l border-gray-200 h-full flex flex-col shadow-2xl z-30 relative overflow-hidden animate-in slide-in-from-right duration-300">
+    <div className="w-96 max-lg:absolute max-lg:right-0 max-lg:top-0 max-lg:z-60 max-sm:inset-0 max-sm:w-full bg-white border-l border-gray-200 h-full flex flex-col shadow-2xl z-30 relative overflow-hidden animate-in slide-in-from-right duration-300">
       <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-slate-50 shrink-0">
         <div className="flex items-center gap-3">
           <div className={`p-2 rounded-lg ${colors.bg}`}>
@@ -491,7 +516,6 @@ export default function PropertiesPanel({
                       }
                     />
                   ) : input.type === "list" ? (
-                    // --- 🟢 NEW: LIST RENDERER (For Switch Router Routes) ---
                     <div className="space-y-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
                       {(() => {
                         const currentListStr = currentData[input.name] || "";
@@ -507,13 +531,13 @@ export default function PropertiesPanel({
                                 key={idx}
                                 className="flex gap-2 items-center"
                               >
-                                <div className="bg-slate-200 text-slate-500 font-bold text-[10px] px-2 py-1.5 rounded flex-shrink-0">
+                                <div className="bg-slate-200 text-slate-500 font-bold text-[10px] px-2 py-1.5 rounded shrink-0">
                                   <GitFork size={12} className="inline mr-1" />
                                   PATH
                                 </div>
                                 <input
                                   type="text"
-                                  className="flex-1 py-1.5 px-3 rounded text-sm font-mono border border-slate-200 focus:outline-none focus:border-indigo-500"
+                                  className="flex-1 py-1.5 px-3 rounded text-sm text-slate-400 font-mono border border-slate-200 focus:outline-none focus:border-indigo-500"
                                   value={item}
                                   onChange={(e) =>
                                     handleListChange(
@@ -542,6 +566,48 @@ export default function PropertiesPanel({
                           </>
                         );
                       })()}
+                    </div>
+                  ) : input.type === "workflow-select" ? (
+                    <div className="relative">
+                      {openSelect === input.name && (
+                        <div className="fixed inset-0 z-40" onClick={() => setOpenSelect(null)} />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setOpenSelect(openSelect === input.name ? null : input.name)}
+                        className={`relative z-50 w-full px-3 py-2.5 rounded-xl text-sm transition-all flex items-center justify-between border ${
+                          openSelect === input.name
+                            ? "bg-white border-indigo-500 ring-4 ring-indigo-500/10 shadow-sm"
+                            : "bg-white border-slate-200 hover:border-slate-300 shadow-sm"
+                        }`}
+                      >
+                        <span className={`truncate ${!currentData[input.name] ? "text-slate-400" : "text-slate-800 font-medium"}`}>
+                          {savedWorkflows.find(w => w.id === currentData[input.name])?.name || "Select a saved workflow"}
+                        </span>
+                        <ChevronDown size={16} className={`transition-transform duration-200 text-slate-400 ${openSelect === input.name ? "rotate-180 text-indigo-500" : ""}`} />
+                      </button>
+
+                      {openSelect === input.name && (
+                        <div className="absolute top-full left-0 mt-2 w-full bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 z-50 max-h-60 overflow-y-auto custom-scrollbar">
+                          {savedWorkflows.length === 0 ? (
+                             <div className="px-4 py-3 text-xs text-slate-400 text-center">No workflows saved yet.</div>
+                          ) : (
+                            savedWorkflows.map((wf: any) => (
+                              <button
+                                key={wf.id}
+                                type="button"
+                                onClick={() => {
+                                  handleChange(input.name, wf.id);
+                                  setOpenSelect(null);
+                                }}
+                                className={`w-full text-left px-3 py-2 text-sm transition-colors ${currentData[input.name] === wf.id ? "bg-indigo-50 text-indigo-700 font-semibold" : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"}`}
+                              >
+                                {wf.name}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
                     </div>
                   ) : input.type === "select" ? (
                     <div className="relative">
@@ -759,14 +825,14 @@ export default function PropertiesPanel({
       {pickerConfig && (
         <>
           <div
-            className="absolute inset-0 z-[90] bg-slate-900/20 backdrop-blur-sm animate-in fade-in duration-300"
+            className="absolute inset-0 z-90 bg-slate-900/20 backdrop-blur-sm animate-in fade-in duration-300"
             onClick={() => {
               setPickerConfig(null);
               setExpandedGroup(null);
               setSearchQuery("");
             }}
           />
-          <div className="absolute inset-x-0 bottom-0 z-[100] w-full bg-white border-t border-slate-200 shadow-[0_-20px_40px_-15px_rgba(0,0,0,0.1)] flex flex-col rounded-t-[1.5rem] animate-in slide-in-from-bottom-12 duration-300 max-h-[85%]">
+          <div className="absolute inset-x-0 bottom-0 z-100 w-full bg-white border-t border-slate-200 shadow-[0_-20px_40px_-15px_rgba(0,0,0,0.1)] flex flex-col rounded-t-3xl animate-in slide-in-from-bottom-12 duration-300 max-h-[85%]">
             <div className="w-full flex justify-center pt-3 pb-2 shrink-0">
               <div className="w-12 h-1.5 bg-slate-200 rounded-full"></div>
             </div>

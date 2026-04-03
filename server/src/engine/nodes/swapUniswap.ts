@@ -4,26 +4,28 @@ import { baseSepolia } from "viem/chains";
 import { encodeSwap, UNISWAP_ROUTER } from "../uniswap.js";
 import { createNexusAccount } from "../smartAccount.js";
 import { Sanitize } from "../utils/inputSanitizer.js";
+import { resolveTokenDetails } from "../utils/tokenUtils.js"; // 🟢 Import the universal resolver
 import { KNOWN_TOKENS } from "../utils/tokenRegistry.js";
 
 type ActionInput = Record<string, any>;
 
 export const swapUniswap = async (inputs: ActionInput, context: ExecutionContext) => {
     
+    // 1. Initialize the public client first so our resolver can use it
+    const publicClient = createPublicClient({
+        chain: baseSepolia, 
+        transport: http()
+    });
+
     const selectedTokenIn = resolveVariable(inputs.tokenIn, context);
     const selectedTokenOut = resolveVariable(inputs.tokenOut, context);
     
-    const tokenInConfig = KNOWN_TOKENS[selectedTokenIn] || {
-        address: resolveVariable(inputs.customTokenIn, context),
-        decimals: inputs.customDecimals ? Number(resolveVariable(inputs.customDecimals, context)) : 18,
-        isNative: inputs.customIsNative === "true"
-    };
+    const customTokenInRaw = resolveVariable(inputs.customTokenIn, context);
+    const customTokenOutRaw = resolveVariable(inputs.customTokenOut, context);
 
-    const tokenOutConfig = KNOWN_TOKENS[selectedTokenOut] || {
-        address: resolveVariable(inputs.customTokenOut, context),
-        decimals: 18,
-        isNative: false
-    };
+    // 🟢 2. Use the Universal Token Resolver for BOTH tokens!
+    const tokenInConfig = await resolveTokenDetails(selectedTokenIn, customTokenInRaw, publicClient);
+    const tokenOutConfig = await resolveTokenDetails(selectedTokenOut, customTokenOutRaw, publicClient);
 
     const tokenInAddress = Sanitize.address(tokenInConfig.address);
     const tokenOutAddress = Sanitize.address(tokenOutConfig.address);
@@ -34,30 +36,27 @@ export const swapUniswap = async (inputs: ActionInput, context: ExecutionContext
 
     const rawAmount = resolveVariable(inputs.amountIn, context);
     const amount = Sanitize.number(rawAmount);
-    const recipient = resolveVariable(inputs.recipient, context);
+    const recipientRaw = resolveVariable(inputs.recipient, context);
 
     console.log(`   🦄 Executing Uniswap Node: Swapping ${amount} ${selectedTokenIn} to ${selectedTokenOut} on Base Sepolia...`);
 
     const amountBigInt = parseUnits(amount.toString(), tokenInConfig.decimals);
     
-    const calldata = encodeSwap(routerTokenIn, routerTokenOut, amountBigInt, recipient);
-    
     const nexusClient = await createNexusAccount(0);
     const accountAddress = nexusClient.account.address;
 
+    // Default to the Smart Account if no recipient is provided
+    const recipient = recipientRaw ? Sanitize.address(recipientRaw) : accountAddress;
+
+    const calldata = encodeSwap(routerTokenIn, routerTokenOut, amountBigInt, recipient);
+
     console.log(`      -> Verifying ${selectedTokenIn} balance for ${accountAddress}...`);
-    
-    const publicClient = createPublicClient({
-        chain: baseSepolia, 
-        transport: http()
-    });
 
     let balance: bigint;
 
     if (tokenInConfig.isNative) {
         balance = await publicClient.getBalance({ address: accountAddress as `0x${string}` });
     } else {
-
         const erc20Abi = parseAbi(["function balanceOf(address owner) view returns (uint256)"]);
         balance = await publicClient.readContract({
             address: tokenInAddress as `0x${string}`,
@@ -68,7 +67,6 @@ export const swapUniswap = async (inputs: ActionInput, context: ExecutionContext
     }
 
     if (balance < amountBigInt) {
-
         const missingAmountBigInt = amountBigInt - balance;
         
         const errorPayload = {
@@ -76,7 +74,7 @@ export const swapUniswap = async (inputs: ActionInput, context: ExecutionContext
             tokenSymbol: selectedTokenIn === 'Custom' ? 'Custom Token' : selectedTokenIn,
             tokenAddress: tokenInAddress,
             isNative: tokenInConfig.isNative,
-            missingAmountRaw: missingAmountBigInt.toString(), // Sent as string to preserve precision
+            missingAmountRaw: missingAmountBigInt.toString(), 
             missingAmountFormatted: formatUnits(missingAmountBigInt, tokenInConfig.decimals),
             accountAddress: accountAddress,
             workflowId: (context as any).SYSTEM_WORKFLOW_ID || null,

@@ -6,6 +6,7 @@ import { Server } from "socket.io";
 import { workflowQueue } from "../queue/workflowQueue.js";
 import { redisConnection } from "../config/redis.js"; 
 import { NODE_REGISTRY } from "../engine/nodes/index.js";
+import { v4 as uuidv4 } from 'uuid';
 
 const app: express.Application = express();
 
@@ -456,6 +457,71 @@ app.delete('/schedules/:key', async (req, res) => {
         res.json({ success: true, message: "Schedule stopped successfully." });
     } catch (error: any) {
         console.error("Error stopping schedule:", error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// 🟢 1. SAVE WORKFLOW
+app.post('/api/workflows/save', async (req, res) => {
+    try {
+        // 🟢 Add 'actions' to the destructuring
+        const { id, name, nodes, edges, actions } = req.body; 
+        
+        const workflowId = id || uuidv4();
+        
+        const workflowData = {
+            id: workflowId,
+            name: name || "Untitled Workflow",
+            nodes,
+            edges,
+            actions, // 🟢 Save the compiled actions to Redis!
+            updatedAt: new Date().toISOString()
+        };
+
+        await redisConnection.hset('nexus_workflows', workflowId, JSON.stringify(workflowData));
+        res.json({ success: true, workflowId, message: "Workflow saved successfully" });
+    } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// 🟢 2. LIST ALL WORKFLOWS (For the Iterator Dropdown & Dashboard)
+app.get('/api/workflows', async (req, res) => {
+    try {
+        // Fetch all workflows from the Redis Hash
+        const workflowsRaw = await redisConnection.hgetall('nexus_workflows');
+        
+        const workflows = Object.values(workflowsRaw).map(raw => {
+            const parsed = JSON.parse(raw);
+            return {
+                id: parsed.id,
+                name: parsed.name,
+                updatedAt: parsed.updatedAt
+            };
+        });
+
+        // Sort by newest first
+        workflows.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+        res.json({ success: true, workflows });
+    } catch (error: any) {
+        console.error("List Workflows Error:", error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// 🟢 3. LOAD A SPECIFIC WORKFLOW
+app.get('/api/workflows/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const rawData = await redisConnection.hget('nexus_workflows', id);
+        
+        if (!rawData) {
+            return res.status(404).json({ success: false, error: "Workflow not found" });
+        }
+
+        res.json({ success: true, workflow: JSON.parse(rawData) });
+    } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
     }
 });

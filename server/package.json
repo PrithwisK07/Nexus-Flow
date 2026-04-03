@@ -17,7 +17,8 @@
     "@types/express": "^5.0.6",
     "@types/ioredis": "^5.0.0",
     "@types/node": "^22.19.15",
-    "@types/nodemailer": "^7.0.11"
+    "@types/nodemailer": "^7.0.11",
+    "@types/uuid": "^11.0.0"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -34,7 +35,9 @@
     "rss-parser": "^3.13.0",
     "socket.io": "^4.8.3",
     "tsx": "^4.21.0",
+    "twilio": "^5.13.1",
     "typescript": "^5.9.3",
+    "uuid": "^13.0.0",
     "viem": "^2.44.4"
   }
 }

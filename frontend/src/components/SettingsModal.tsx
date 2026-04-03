@@ -7,13 +7,11 @@ export default function SettingsModal({
   onSave,
   initialData,
 }: any) {
-  const [data, setData] = useState(
-    initialData || {
-      name: "My Workflow",
-      spreadsheetId: "",
-      columnMapping: {},
-    },
-  );
+  // 🟢 Removed 'name' to prevent state conflicts with the Top Bar inline editor
+  const [data, setData] = useState({
+    spreadsheetId: initialData?.spreadsheetId || "",
+    columnMapping: initialData?.columnMapping || {},
+  });
 
   const [mappings, setMappings] = useState<{ col: string; var: string }[]>(
     Object.entries(initialData?.columnMapping || {}).map(([k, v]) => ({
@@ -52,7 +50,6 @@ export default function SettingsModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-      {/* 🟢 MODIFIED: max-sm:w-[95vw] */}
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-[500px] flex flex-col max-h-[90vh] overflow-hidden">
         {/* Header */}
         <div className="p-5 max-sm:p-4 border-b border-gray-100 flex justify-between items-center bg-slate-50">
@@ -72,23 +69,12 @@ export default function SettingsModal({
           <div className="space-y-4">
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 uppercase">
-                Workflow Name
-              </label>
-              <input
-                className="w-full p-2.5 border border-gray-200 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                value={data.name}
-                onChange={(e) => setData({ ...data, name: e.target.value })}
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 uppercase">
                 Google Sheet ID
               </label>
               <input
                 className="w-full p-2.5 border border-gray-200 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
                 placeholder="1BxiMVs0XRA5nFMd..."
-                value={data.spreadsheetId}
+                value={data.spreadsheetId || ""}
                 onChange={(e) =>
                   setData({ ...data, spreadsheetId: e.target.value })
                 }
@@ -124,7 +110,6 @@ export default function SettingsModal({
               )}
 
               {mappings.map((m, i) => (
-                // 🟢 MODIFIED: Added max-sm:flex-wrap
                 <div
                   key={i}
                   className="flex gap-3 items-center group max-sm:flex-wrap max-sm:bg-slate-50 max-sm:p-3 max-sm:rounded-lg max-sm:border max-sm:border-slate-100"
@@ -149,11 +134,10 @@ export default function SettingsModal({
                     <input
                       className="w-full p-2 border border-gray-200 rounded-lg text-sm text-slate-900 outline-none focus:border-indigo-500 placeholder:text-slate-300 font-mono"
                       placeholder="e.g. WalletAddress"
-                      value={m.var}
+                      value={m.var || ""}
                       onChange={(e) => updateMapping(i, "var", e.target.value)}
                     />
 
-                    {/* Delete visible on mobile by default, hover on desktop */}
                     <button
                       onClick={() => removeMapping(i)}
                       className="text-slate-300 hover:text-red-500 p-2 transition-colors opacity-0 group-hover:opacity-100 max-sm:opacity-100 shrink-0"

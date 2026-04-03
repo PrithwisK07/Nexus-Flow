@@ -38,6 +38,7 @@ import {
   Clock,
   Menu,
   X,
+  FolderOpen,
 } from "lucide-react";
 
 import NexusNode from "@/components/flow/NexusNode";
@@ -47,6 +48,7 @@ import LiveLogs from "@/components/LiveLogs";
 import SettingsModal from "@/components/SettingsModal";
 import ActiveSchedulesModal from "@/components/ActiveSchedulesModal";
 import DepositModal from "@/components/DepositModal";
+import WorkflowManagerModal from "@/components/flow/WorkflowManagerModal";
 import { useUndoRedo } from "@/hooks/useUndoRedo";
 import { useDeployment } from "@/hooks/useDeployment";
 import { NODE_TYPES, CATEGORY_COLORS } from "@/lib/nodeConfig";
@@ -102,7 +104,7 @@ function NexusCanvas() {
 
   const [nodes, setNodes, onNodesChange] = useNodesState(INITIAL_NODES);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, getNodes, getEdges } = useReactFlow();
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [menu, setMenu] = useState<any>(null);
@@ -110,14 +112,12 @@ function NexusCanvas() {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSchedulesOpen, setIsSchedulesOpen] = useState(false);
-
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
   const [depositData, setDepositData] = useState<any>(null);
 
   const [globalSettings, setGlobalSettings] = useState({
-    name: "My Workflow",
     spreadsheetId: "",
   });
 
@@ -131,14 +131,17 @@ function NexusCanvas() {
 
   const { isCompact, toggleCompact } = useContext(FlowContext);
 
-  // 🟢 NEW: Listen for manual triggers of the Deposit Modal from the error popover
+  // --- WORKFLOW STATE ---
+  const [workflowId, setWorkflowId] = useState<string | null>(null);
+  const [workflowName, setWorkflowName] = useState("Untitled Workflow");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isManagerOpen, setIsManagerOpen] = useState(false);
+
   useEffect(() => {
     const handleReopen = () => {
       setIsDepositModalOpen(true);
     };
-
     window.addEventListener("reopen-deposit-modal", handleReopen);
-
     return () => {
       window.removeEventListener("reopen-deposit-modal", handleReopen);
     };
@@ -147,11 +150,11 @@ function NexusCanvas() {
   useEffect(() => {
     if (activeJobId && hotReload) {
       const timeoutId = setTimeout(() => {
-        hotReload(globalSettings.name, globalSettings, activeJobId);
+        hotReload(workflowName, globalSettings, activeJobId);
       }, 1000);
       return () => clearTimeout(timeoutId);
     }
-  }, [nodes, edges, globalSettings, activeJobId, hotReload]);
+  }, [nodes, edges, globalSettings, activeJobId, hotReload, workflowName]);
 
   useEffect(() => {
     socket.on("workflow_update", (event) => {
@@ -179,7 +182,6 @@ function NexusCanvas() {
         return;
       }
 
-      // 🟢 MODIFIED: More robust string parsing using .includes()
       if (
         type === "node_failed" &&
         error &&
@@ -224,7 +226,6 @@ function NexusCanvas() {
               };
             }
             if (type === "node_failed") {
-              // 🟢 MODIFIED: Match the robust string check for the UI override
               const displayError =
                 typeof error === "string" && error.includes("[ACTION_REQUIRED]")
                   ? "Insufficient Funds (See popup)"
@@ -317,6 +318,109 @@ function NexusCanvas() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [undo, redo, nodes, edges, setNodes, setEdges]);
 
+  // 🟢 INLINE GRAPH COMPILER (Used specifically for saving executable sub-workflows)
+  const compileGraph = (currentNodes: Node[], currentEdges: Edge[]) => {
+    const triggerNode = currentNodes.find((n) => {
+      const cat = NODE_TYPES[n.data.type]?.category;
+      return cat === "trigger" || n.data.type === "webhook";
+    });
+
+    if (!triggerNode) return [];
+
+    const buildSegment = (nodeId: string, visited: Set<string>): any[] => {
+      if (visited.has(nodeId)) return [];
+      visited.add(nodeId);
+
+      const node = currentNodes.find((n) => n.id === nodeId);
+      if (!node) return [];
+
+      const action: any = {
+        id: node.id,
+        type: node.data.type,
+        inputs: { ...node.data.config },
+      };
+
+      if (node.data.type === "switch_router") {
+        action.routeMap = {};
+        const rawRoutes = node.data.config.routes || "";
+        const routes = [...rawRoutes.split(",").map((r: string) => r.trim()), "default"];
+
+        routes.forEach((route) => {
+          if (!route) return;
+          const connectedEdge = currentEdges.find((e) => e.source === node.id && e.sourceHandle === route);
+          if (connectedEdge) {
+            action.routeMap[route] = buildSegment(connectedEdge.target, new Set(visited));
+          } else {
+            action.routeMap[route] = [];
+          }
+        });
+        return [action]; 
+      }
+
+      if (node.data.type === "condition") {
+        const trueEdge = currentEdges.find((e) => e.source === node.id && e.sourceHandle === "true");
+        const falseEdge = currentEdges.find((e) => e.source === node.id && e.sourceHandle === "false");
+        
+        action.trueRoutes = trueEdge ? buildSegment(trueEdge.target, new Set(visited)) : [];
+        action.falseRoutes = falseEdge ? buildSegment(falseEdge.target, new Set(visited)) : [];
+        return [action];
+      }
+
+      const nextEdges = currentEdges.filter((e) => e.source === node.id);
+      const nextNodes = nextEdges.flatMap((e) => buildSegment(e.target, new Set(visited)));
+
+      return [action, ...nextNodes];
+    };
+
+    const startEdges = currentEdges.filter((e) => e.source === triggerNode.id);
+    return startEdges.flatMap((e) => buildSegment(e.target, new Set()));
+  };
+
+  // 🟢 SAVE WORKFLOW HANDLER (Now compiles the graph to support the Iterator Node!)
+  const handleSaveWorkflow = async () => {
+    setIsSaving(true);
+    try {
+      const currentNodes = getNodes();
+      const currentEdges = getEdges();
+
+      const compiledActions = compileGraph(currentNodes, currentEdges);
+
+      const response = await fetch(`${API_BASE_URL}/api/workflows/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: workflowId,
+          name: workflowName,
+          nodes: currentNodes,
+          edges: currentEdges,
+          actions: compiledActions, // Send the execution array to Redis!
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setWorkflowId(data.workflowId);
+        toast.success("Workflow saved successfully!");
+      } else {
+        toast.error("Failed to save workflow");
+      }
+    } catch (error) {
+      console.error("Save error:", error);
+      toast.error("Network error while saving");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 🟢 LOAD WORKFLOW HANDLER
+  const handleLoadWorkflow = (workflowData: any) => {
+    setWorkflowId(workflowData.id);
+    setWorkflowName(workflowData.name);
+    setNodes(workflowData.nodes || []);
+    setEdges(workflowData.edges || []);
+    toast.success(`Loaded ${workflowData.name}`);
+  };
+
   const handleDeploy = async () => {
     setEdges((eds) =>
       eds.map((e) => ({
@@ -334,7 +438,7 @@ function NexusCanvas() {
       nds.map((n) => ({ ...n, data: { ...n.data, executionData: null } })),
     );
 
-    const promise = deploy(globalSettings.name, globalSettings, activeJobId);
+    const promise = deploy(workflowName, globalSettings, activeJobId);
     const result = await promise;
 
     if (result.success) {
@@ -375,7 +479,7 @@ function NexusCanvas() {
       nds.map((n) => ({ ...n, data: { ...n.data, executionData: null } })),
     );
 
-    const result = await runNow(globalSettings.name, globalSettings);
+    const result = await runNow(workflowName, globalSettings);
     if (result.success) {
       toast.success("Test Run Started!", { duration: 2000 });
       if (result.jobId) {
@@ -597,7 +701,6 @@ function NexusCanvas() {
 
   return (
     <div className="flex h-screen w-full bg-slate-50 font-sans overflow-hidden relative">
-      {/* Mobile/Tablet Backdrop for Sidebar */}
       {isMobileMenuOpen && (
         <div
           className="hidden max-lg:block absolute inset-0 bg-slate-900/50 backdrop-blur-sm z-30"
@@ -605,7 +708,7 @@ function NexusCanvas() {
         />
       )}
 
-      {/* LEFT SIDEBAR (Hidden on tablet/mobile by default) */}
+      {/* LEFT SIDEBAR */}
       <div
         className={`w-72 bg-white border-r border-gray-200 flex flex-col z-40 shadow-sm max-lg:absolute max-lg:inset-y-0 max-lg:left-0 max-lg:transition-transform max-lg:duration-300 ${isMobileMenuOpen ? "max-lg:translate-x-0" : "max-lg:-translate-x-full"}`}
       >
@@ -631,7 +734,6 @@ function NexusCanvas() {
           </button>
         </div>
 
-        {/* Search Bar */}
         <div className="p-4 pb-0">
           <div className="relative">
             <Search
@@ -648,7 +750,6 @@ function NexusCanvas() {
           </div>
         </div>
 
-        {/* Node Palette */}
         <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
           {["trigger", "web3", "data", "logic", "notify", "ops", "ai"].map(
             (cat) => {
@@ -704,7 +805,8 @@ function NexusCanvas() {
 
       {/* MAIN CANVAS */}
       <div className="flex-1 flex flex-col relative h-full min-w-0">
-        {/* Header */}
+        
+        {/* 🟢 TOP BAR */}
         <div className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 max-lg:px-4 z-10 shrink-0">
           <div className="flex items-center gap-4 max-lg:gap-2">
             <button
@@ -713,49 +815,44 @@ function NexusCanvas() {
             >
               <Menu size={20} />
             </button>
-            <span className="text-slate-400 text-sm max-lg:hidden">
-              Workflow /{" "}
-              <span className="text-slate-800 font-semibold">
-                {globalSettings.name}
-              </span>
-            </span>
-            <span className="hidden max-lg:block text-slate-800 font-semibold text-sm truncate max-w-[150px] max-sm:max-w-[100px]">
-              {globalSettings.name}
-            </span>
+            
+            <div className="flex items-center gap-2 max-lg:hidden">
+              <span className="text-slate-400 text-sm font-medium">Workflow /</span>
+              <input 
+                type="text" 
+                value={workflowName}
+                onChange={(e) => setWorkflowName(e.target.value)}
+                className="font-bold text-slate-800 bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-indigo-100 rounded px-1 -ml-1 hover:bg-slate-50 transition-colors text-sm w-48"
+                placeholder="Name your workflow..."
+              />
+            </div>
+
+            <input 
+              type="text" 
+              value={workflowName}
+              onChange={(e) => setWorkflowName(e.target.value)}
+              className="hidden max-lg:block font-bold text-slate-800 bg-transparent border-none focus:outline-none text-sm w-32 truncate"
+              placeholder="Workflow Name"
+            />
+
             <button
               onClick={() => setIsSettingsOpen(true)}
               className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600 transition-colors"
+              title="Global Settings"
             >
               <Settings size={14} />
             </button>
+
+            <button 
+              onClick={() => setIsManagerOpen(true)}
+              className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-indigo-600 transition-colors"
+              title="Manage Saved Workflows"
+            >
+              <FolderOpen size={16} />
+            </button>
           </div>
 
-          <div className="flex gap-3 max-lg:gap-1.5 relative">
-            <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 mr-2 max-lg:mr-0 max-sm:hidden">
-              <button
-                onClick={() => isCompact && toggleCompact()}
-                className={`p-1.5 rounded-md transition-all ${
-                  !isCompact
-                    ? "bg-white text-indigo-600 shadow-sm"
-                    : "text-slate-400 hover:text-slate-600"
-                }`}
-                title="Card View"
-              >
-                <LayoutGrid size={16} />
-              </button>
-              <button
-                onClick={() => !isCompact && toggleCompact()}
-                className={`p-1.5 rounded-md transition-all ${
-                  isCompact
-                    ? "bg-white text-indigo-600 shadow-sm"
-                    : "text-slate-400 hover:text-slate-600"
-                }`}
-                title="Icon View"
-              >
-                <LayoutList size={16} />
-              </button>
-            </div>
-
+          <div className="flex gap-3 max-lg:gap-1.5 relative items-center">
             <button
               onClick={() => setIsSchedulesOpen(true)}
               className="flex items-center gap-2 px-4 py-2 max-lg:px-2.5 max-lg:py-1.5 text-slate-600 bg-white border border-slate-200 rounded-lg text-sm font-bold hover:bg-slate-50 transition-colors"
@@ -763,6 +860,15 @@ function NexusCanvas() {
             >
               <Clock size={16} className="text-indigo-500" />{" "}
               <span className="max-sm:hidden">Schedules</span>
+            </button>
+
+            <button 
+              onClick={handleSaveWorkflow}
+              disabled={isSaving}
+              className="flex items-center gap-2 px-4 py-2 max-lg:px-2.5 max-lg:py-1.5 text-slate-600 bg-white border border-slate-200 rounded-lg text-sm font-bold hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-colors disabled:opacity-50"
+            >
+              {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} 
+              <span className="max-sm:hidden">Save</span>
             </button>
 
             <button
@@ -859,7 +965,7 @@ function NexusCanvas() {
         />
       )}
 
-      {/* DEPOSIT MODAL */}
+      {/* MODALS */}
       <DepositModal
         isOpen={isDepositModalOpen}
         onClose={() => setIsDepositModalOpen(false)}
@@ -907,6 +1013,12 @@ function NexusCanvas() {
           setGlobalSettings(data);
           setIsSettingsOpen(false);
         }}
+      />
+
+      <WorkflowManagerModal 
+        isOpen={isManagerOpen} 
+        onClose={() => setIsManagerOpen(false)} 
+        onLoad={handleLoadWorkflow} 
       />
     </div>
   );

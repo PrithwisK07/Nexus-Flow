@@ -29,6 +29,7 @@ import { switchRouter } from "./switchRouter.js";
 import { aaveSupply } from "./aaveSupply.js";
 import { aaveWithdraw } from "./aaveWithdraw.js";
 import { aaveBalance } from "./aaveBalance.js";
+import { iteratorNode } from "./iterator.js";
 
 export const NODE_REGISTRY: Record<string, Function> = {
     "transfer": transfer,    
@@ -61,5 +62,6 @@ export const NODE_REGISTRY: Record<string, Function> = {
     "switch_router": switchRouter,
     "aave_supply": aaveSupply,
     "aave_withdraw": aaveWithdraw,
-    "aave_balance": aaveBalance
+    "aave_balance": aaveBalance,
+    "iterator": iteratorNode
 };
