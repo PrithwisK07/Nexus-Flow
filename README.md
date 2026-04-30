@@ -9,7 +9,7 @@
 
 Designed for DeFi power users, traders, and Web3 developers, Nexus Flow allows you to build complex, multi-step workflows using a visual node-based canvas. It features Smart Account abstraction, AI-driven routing, deep DeFi integrations, and stateful workflows that can pause and resume seamlessly.
 
-![Nexus Flow Canvas Overview](./docs/nexus-canvas-hero.png)
+![Nexus Flow Canvas Overview](./res/hero.png)
 
 ---
 
@@ -205,6 +205,20 @@ Runs on: `http://localhost:3000`
 3. Jobs are pushed to Redis queue
 4. Worker processes each node step-by-step
 5. Results stream back via sockets
+
+---
+
+## Sample Workflows
+
+Switch Branched WorkFlows
+
+![Switch Branched WorkFlows](./res/c1.png)
+
+Smart Agent WorkFlows
+![Smart Agent WorkFlows](./res/c2.png)
+
+Wallet Funding
+![Wallet Funding](./res/c3.png)
 
 ---
 
